@@ -69,6 +69,13 @@ def cli() -> None:
 @click.option("--no-docker", is_flag=True, help="Run the tool's cmd instead of its Docker image.")
 @click.option("--repeat", default=2, show_default=True, type=int, help="Determinism repeats.")
 @click.option(
+    "--timeout",
+    default=600,
+    show_default=True,
+    type=int,
+    help="Per-run wall-clock limit in seconds for the tool process.",
+)
+@click.option(
     "--reports",
     type=click.Path(path_type=Path),
     default=DEFAULT_REPORTS,
@@ -80,11 +87,14 @@ def run_cmd(
     tiers: tuple[str, ...],
     no_docker: bool,
     repeat: int,
+    timeout: int,
     reports: Path,
 ) -> None:
     """Run a registered tool and write reports/<tool>/report.{md,json}."""
     if repeat < 1:
         raise click.ClickException("--repeat must be >= 1")
+    if timeout < 1:
+        raise click.ClickException("--timeout must be >= 1")
     tool_cfg = _find_tool(tool)
     tier_list = _tier_list(tiers)
     loaded_cases = load_cases(cases, tier_list)
@@ -100,6 +110,7 @@ def run_cmd(
                     tier_list,
                     use_docker=not no_docker,
                     work_dir=work_dir,
+                    timeout=timeout,
                 )
             )
     except (RunnerError, SchemaError) as exc:

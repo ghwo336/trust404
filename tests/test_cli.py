@@ -111,3 +111,77 @@ def test_ingest_paper_creates_case(tmp_path: Path) -> None:
     loaded = load_cases(cases, tiers=["2"])
     assert len(loaded) == 1
     assert list(loaded[0].expected_families) == ["B"]
+
+
+def _stub_cli_run(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> list[dict]:
+    captured: list[dict] = []
+
+    def fake_run(*_args, **kwargs):
+        captured.append(kwargs)
+        return {"result": object()}
+
+    monkeypatch.setattr("baybench.cli.run", fake_run)
+    monkeypatch.setattr(
+        "baybench.cli.build_report",
+        lambda *_a, **_k: {
+            "scoring": {"weighted_score": 0.0, "overall": {"compile_fail_count": 0}},
+            "determinism": {"deterministic": True},
+        },
+    )
+    monkeypatch.setattr(
+        "baybench.cli.write_report",
+        lambda _reports, _rep: (tmp_path / "report.md", tmp_path / "report.json"),
+    )
+    return captured
+
+
+def _invoke_run(tmp_path: Path, extra: list[str]) -> object:
+    cases = tmp_path / "cases"
+    cases.mkdir(exist_ok=True)
+    argv = [
+        "run",
+        "baseline_keyword",
+        "--no-docker",
+        "--repeat",
+        "2",
+        "--cases",
+        str(cases),
+        "--reports",
+        str(tmp_path / "reports"),
+        *extra,
+    ]
+    return CliRunner().invoke(cli, argv)
+
+
+def test_run_help_lists_timeout() -> None:
+    result = CliRunner().invoke(cli, ["run", "--help"])
+    assert result.exit_code == 0, result.output
+    assert "--timeout" in result.output
+
+
+def test_run_forwards_timeout_to_runner(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    captured = _stub_cli_run(monkeypatch, tmp_path)
+    result = _invoke_run(tmp_path, ["--timeout", "42"])
+    assert result.exit_code == 0, result.output
+    assert captured
+    assert all(call["timeout"] == 42 for call in captured)
+
+
+def test_run_default_timeout_is_600(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    captured = _stub_cli_run(monkeypatch, tmp_path)
+    result = _invoke_run(tmp_path, [])
+    assert result.exit_code == 0, result.output
+    assert captured
+    assert all(call["timeout"] == 600 for call in captured)
+
+
+def test_run_timeout_zero_rejected() -> None:
+    result = CliRunner().invoke(
+        cli, ["run", "baseline_keyword", "--timeout", "0", "--no-docker"]
+    )
+    assert result.exit_code != 0
+    assert "--timeout must be >= 1" in result.output
