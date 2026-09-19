@@ -24,6 +24,8 @@ detector/                      Python package = the tool (flat; ships standalone
   engine.py                    per-file worker (subprocess + timeout), batch loop, file→results
   model.py                     Finding / FileResult dataclasses; results.json writer; canonical sort
   summary.py                   summary.md renderer
+  describe.py                  rule titles / explanations / reason sentences (reporting only)
+  README.md                    judge-facing: quick start, reading summary.md, verdict derivation, rule table
   policy.py                    severity adjustment (discriminators) + verdict + reason + escalation
   analysis/
     __init__.py
@@ -107,7 +109,7 @@ One result per `.sol` file under the input root (recursive, sorted by relative P
 
 ### `summary.py`
 
-- `render_summary(results: list[FileResult], meta: dict) -> str` — header (tool, version, file count, verdict counts), then per file: verdict, reason, and a findings table (`rule_id | severity | contract.function | lines | reasoning`). Deterministic. Written next to `results.json` as `summary.md`.
+- `render_summary(results: list[FileResult], meta: dict) -> str` — legend (verdict + severity meanings), header (tool, version, file count, verdict counts), a verdict-sorted overview table (`file | verdict | why | HIGH | MED | INFO`) with a human `why` sentence per file, then per file: verdict + reason sentence and findings grouped HIGH → MED → INFO as `rule | title | where | lines | evidence` (line ranges compressed, `downgraded HIGH→MED` noted, PRIV_ROLE rows collapsed behind `<details>` when > 6). Rule titles/explanations and reason/discriminator sentences live in `describe.py` (reporting only; not used by rules or policy). Deterministic; no paths or timestamps. Written next to `results.json` as `summary.md`. (Amended 2026-09-20 at packaging: the earlier 5-column flat table was replaced by this judge-facing layout; `results.json` unchanged.)
 
 ### `cli.py`
 
