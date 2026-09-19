@@ -126,6 +126,18 @@ def test_slither_high_overlay_is_uncertain() -> None:
     assert decide(findings) == ("Uncertain", "slither_high")
 
 
+def test_slither_high_evidence_only_does_not_lift() -> None:
+    evidence = _finding(
+        "SLITHER_HIGH_OVERLAY",
+        family="C",
+        severity="INFO",
+        discriminators=("evidence_only",),
+    )
+    assert decide([evidence]) == ("Benign", "")
+    exploit = _finding("SLITHER_HIGH_OVERLAY", family="C", severity="INFO")
+    assert decide([exploit]) == ("Uncertain", "slither_high")
+
+
 def test_info_only_is_benign() -> None:
     findings = [_finding("PRIV_ROLE", family="A", severity="INFO")]
     assert decide(findings) == ("Benign", "")

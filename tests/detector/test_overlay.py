@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import yaml
 
-from detector.engine import target_contracts
+from detector.engine import _analyze_in_process, target_contracts
 from detector.rules.overlay import RULES, slither_high_overlay
 from tests.detector.analysis_util import make_ctx, tier1_ctx
-from tests.detector.conftest import TIER1, TIER3
+from tests.detector.conftest import TIER1, TIER3, tier1_sol
 
 _DOWNGRADE = frozenset(
     {"foreign_only", "no_custody", "issuer_token", "managed_role", "library_role"}
@@ -61,6 +61,58 @@ def test_slither_high_overlay_is_memoized(slither_for) -> None:
     second = slither_high_overlay(ctx)
     assert first == second
     assert hasattr(ctx.slither, "_t404_slither_high_overlay")
+
+
+def test_drain_ben_overlay_is_evidence_only(slither_for) -> None:
+    ctx = tier1_ctx(slither_for, "DRAIN_APPROVAL_PULL", "ben")
+    findings = slither_high_overlay(ctx)
+    assert findings
+    assert all("evidence_only" in item.discriminators for item in findings), [
+        (item.reasoning, item.discriminators) for item in findings
+    ]
+
+
+def test_overlay_mal_reentrancy_is_not_evidence_only(slither_for) -> None:
+    ctx = tier1_ctx(slither_for, "SLITHER_HIGH_OVERLAY", "mal")
+    findings = slither_high_overlay(ctx)
+    reentrancy = [item for item in findings if item.reasoning.startswith("reentrancy-eth")]
+    assert reentrancy
+    assert all("evidence_only" not in item.discriminators for item in reentrancy)
+
+
+def test_engine_verdicts_for_overlay_pairs() -> None:
+    drain = _analyze_in_process(
+        str(tier1_sol("DRAIN_APPROVAL_PULL", "ben")),
+        "DRAIN_APPROVAL_PULL/ben/ben.sol",
+    )
+    assert drain["verdict"] == "Benign", drain
+
+    leak = _analyze_in_process(
+        str(tier1_sol("LEAK_PRIV_SWEEP", "ben")),
+        "LEAK_PRIV_SWEEP/ben/ben.sol",
+    )
+    assert leak["verdict"] == "Benign", leak
+
+    mal = _analyze_in_process(
+        str(tier1_sol("SLITHER_HIGH_OVERLAY", "mal")),
+        "SLITHER_HIGH_OVERLAY/mal/mal.sol",
+    )
+    assert mal["verdict"] == "Uncertain", mal
+    assert mal.get("reason") == "slither_high"
+
+
+def test_overlay_reasoning_has_no_path(slither_for) -> None:
+    pairs = (
+        ("DRAIN_APPROVAL_PULL", "ben"),
+        ("LEAK_PRIV_SWEEP", "ben"),
+        ("SLITHER_HIGH_OVERLAY", "mal"),
+    )
+    for rule_id, twin in pairs:
+        ctx = tier1_ctx(slither_for, rule_id, twin)
+        for item in slither_high_overlay(ctx):
+            assert "/" not in item.reasoning, item.reasoning
+            assert ".bench_work" not in item.reasoning, item.reasoning
+            assert item.reasoning.split(":", 1)[0]
 
 
 def test_overlay_tier3_high_findings_carry_downgrade(slither_for) -> None:

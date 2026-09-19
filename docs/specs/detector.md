@@ -182,7 +182,7 @@ Every finding: `contract`, `function` (the function that carries the evidence �
   2. else if `STRUCT_EXTERNAL_GATE` present → `Uncertain`, `reason=external_dependency`.
   3. else escalation: ≥2 findings with `severity == MED`, `counts_for_escalation`, distinct rule IDs, from ≥2 different families → `Malicious` (`reason=escalated:<ids>`) — unless a **suppressing shape** (`issuer_token` or any `managed_role`/`library_role` downgrade applied in this contract) is present.
   4. else any MED → `Uncertain`, `reason=med_findings`.
-  5. else any `SLITHER_HIGH_OVERLAY` → `Uncertain`, `reason=slither_high`.
+  5. else any `SLITHER_HIGH_OVERLAY` whose check is an **exploit-shape** check (`reentrancy-eth`, `arbitrary-send-eth`, `arbitrary-send-erc20`, `arbitrary-send-erc20-permit`, `suicidal`, `controlled-delegatecall`, `delegatecall-loop`, `msg-value-loop`, `unprotected-upgrade`, `protected-vars`, `rtlo`) → `Uncertain`, `reason=slither_high`. Other High-impact checks (e.g. `unchecked-transfer`, `uninitialized-state`, `shadowing-state`) are emitted as INFO evidence with discriminator `evidence_only` and never move the verdict (run 1 miss: `DRAIN_APPROVAL_PULL/ben`).
   6. else `Benign`.
 - Concealment override: if any of {`OWN_HIDDEN_ROLE`, `OWN_FAKE_RENOUNCE`, `VIEW_CALLER_DEPENDENT`, `BAL_TRANSFER_HIDDEN_MINT`, `LEAK_EXEMPT_PATH`, `EXIT_CALLBACK_CYCLE`} fired at HIGH in the contract, **no downgrade applies** to any finding of that contract (disclosed-centralization shapes cannot launder a concealed control).
 

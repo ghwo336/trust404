@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import inspect
 import logging
+import re
+from pathlib import Path
 from typing import Any
 
 from slither.detectors import all_detectors
@@ -17,6 +19,24 @@ from detector.rules.base import make_finding
 logger = logging.getLogger("detector.rules.overlay")
 
 _MEMO = "_t404_slither_high_overlay"
+
+EXPLOIT_SHAPE_CHECKS = frozenset(
+    {
+        "reentrancy-eth",
+        "arbitrary-send-eth",
+        "arbitrary-send-erc20",
+        "arbitrary-send-erc20-permit",
+        "suicidal",
+        "controlled-delegatecall",
+        "delegatecall-loop",
+        "msg-value-loop",
+        "unprotected-upgrade",
+        "protected-vars",
+        "rtlo",
+    }
+)
+
+_SOL_PAREN = re.compile(r"\(([^()]+\.sol#\d+(?:-\d+)?)\)")
 
 
 def _high_detector_classes() -> list[type]:
@@ -91,6 +111,16 @@ def _first_function_element(elements: list, names: set[str]) -> dict | None:
     return None
 
 
+def _basename_sol_parens(text: str) -> str:
+    def _replace(match: re.Match[str]) -> str:
+        inner = match.group(1)
+        path_part, _sep, loc = inner.rpartition("#")
+        base = Path(path_part).name
+        return f"({base}#{loc})" if loc else f"({base})"
+
+    return _SOL_PAREN.sub(_replace, text)
+
+
 def slither_high_overlay(ctx: ContractContext) -> list[Finding]:
     try:
         raw = _run_cached(ctx.slither)
@@ -112,11 +142,12 @@ def slither_high_overlay(ctx: ContractContext) -> list[Finding]:
                 lines = tuple(int(n) for n in (mapping.get("lines") or ()))
                 check = str(item.get("check") or "")
                 desc = str(item.get("description") or "").strip().splitlines()
-                first = desc[0] if desc else ""
+                first = _basename_sol_parens(desc[0] if desc else "")
                 key = (check, fn_name)
                 if key in seen:
                     continue
                 seen.add(key)
+                discs = () if check in EXPLOIT_SHAPE_CHECKS else ("evidence_only",)
                 findings.append(
                     make_finding(
                         "SLITHER_HIGH_OVERLAY",
@@ -124,6 +155,7 @@ def slither_high_overlay(ctx: ContractContext) -> list[Finding]:
                         function=fn_name,
                         lines=lines,
                         reasoning=f"{check}: {first}",
+                        discriminators=discs,
                     )
                 )
         return findings

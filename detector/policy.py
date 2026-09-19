@@ -120,7 +120,10 @@ def decide(
             return "Malicious", f"escalated:{','.join(sorted(rule_ids))}"
     if any(finding.severity == "MED" for finding in findings):
         return "Uncertain", "med_findings"
-    if any(finding.rule_id == "SLITHER_HIGH_OVERLAY" for finding in findings):
+    if any(
+        finding.rule_id == "SLITHER_HIGH_OVERLAY" and "evidence_only" not in finding.discriminators
+        for finding in findings
+    ):
         return "Uncertain", "slither_high"
     return "Benign", ""
 
