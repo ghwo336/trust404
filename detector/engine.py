@@ -74,23 +74,78 @@ def _dedupe_findings(findings: list[Finding]) -> list[Finding]:
     return out
 
 
-def _analyze_in_process(path: str, rel: str) -> dict:
+def _lib_pkg_is_dependency(pkg_dir: Path) -> bool:
+    if (pkg_dir / "package.json").exists() or (pkg_dir / "foundry.toml").exists():
+        return True
+    if (pkg_dir / ".git").exists():
+        return True
+    return (pkg_dir / "src").is_dir() or (pkg_dir / "contracts").is_dir()
+
+
+def is_dependency_target(path: Path, root: Path) -> bool:
+    """True for node_modules trees and package-shaped lib/<pkg>/ (do not resolve symlinks)."""
+    try:
+        parts = Path(path).relative_to(root).parts
+    except ValueError:
+        return False
+    if "node_modules" in parts:
+        return True
+    for i, part in enumerate(parts[:-1]):
+        if part != "lib":
+            continue
+        nxt = parts[i + 1]
+        if nxt.endswith(".sol") and i + 2 == len(parts):
+            continue
+        if _lib_pkg_is_dependency(root.joinpath(*parts[: i + 2])):
+            return True
+    return False
+
+
+def _iter_sol_files(root: Path) -> list[Path]:
+    """Sorted `.sol` files under root; follows directory symlinks and rejects cycles."""
+    found: list[Path] = []
+    seen: set[str] = set()
+    stack = [root]
+    while stack:
+        current = stack.pop()
+        try:
+            resolved = str(current.resolve())
+        except OSError:
+            continue
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        try:
+            children = sorted(current.iterdir(), key=lambda item: item.name)
+        except OSError:
+            continue
+        for child in children:
+            if child.is_dir():
+                stack.append(child)
+            elif child.is_file() and child.suffix == ".sol" and not is_temp_copy(child):
+                found.append(child)
+    found.sort(key=lambda item: item.as_posix())
+    return found
+
+
+def _analyze_in_process(path: str, rel: str, input_root: str | None = None) -> dict:
     """Compile (with the retry ladder), run rules per target contract, decide.
 
     Returns FileResult JSON plus an internal `compile_note` key (relayed to the parent's log;
     never written to results.json).
     """
-    compiled = compile_file_ex(Path(path))
+    file_path = Path(path)
+    root = Path(input_root).resolve() if input_root else _input_root(file_path, rel)
+    compiled = compile_file_ex(file_path, input_root=root)
     if compiled.note:
         logger.info("compile note for %s: %s", rel, compiled.note)
     slither = compiled.slither
     findings: list[Finding] = []
     shape_flag = False
-    # Provenance root stays the ORIGINAL path; a ladder temp copy sits in the same directory.
-    input_root = _input_root(Path(path), rel)
+    # Provenance root is the CLI input directory; a ladder temp copy sits next to the source.
     # Slither filenames point at the file it parsed (temp copy when the ladder rewrote the source).
     for contract in target_contracts(slither, compiled.source_path):
-        ctx = ContractContext(slither=slither, contract=contract, input_root=input_root)
+        ctx = ContractContext(slither=slither, contract=contract, input_root=root)
         raw: list[Finding] = []
         for rule in RULES:
             raw.extend(rule(ctx))
@@ -110,9 +165,9 @@ def _analyze_in_process(path: str, rel: str) -> dict:
     return payload
 
 
-def _worker(fn, path: str, rel: str, queue) -> None:
+def _worker(fn, path: str, rel: str, queue, input_root: str | None = None) -> None:
     try:
-        queue.put(("ok", fn(path, rel)))
+        queue.put(("ok", fn(path, rel, input_root)))
     except CompileError as exc:
         logger.warning("compile failed for %s: %s", rel, exc)
         queue.put(("compile_failed", None))
@@ -147,10 +202,15 @@ def analyze_file(
     rel: str,
     *,
     timeout_s: int = WORKER_TIMEOUT_DEFAULT,
+    input_root: Path | None = None,
 ) -> FileResult:
+    root = Path(input_root).resolve() if input_root is not None else _input_root(path, rel)
     ctx = multiprocessing.get_context("spawn")
     queue = ctx.Queue()
-    proc = ctx.Process(target=_worker, args=(_analyze_in_process, str(path), rel, queue))
+    proc = ctx.Process(
+        target=_worker,
+        args=(_analyze_in_process, str(path), rel, queue, str(root)),
+    )
     proc.start()
     proc.join(timeout_s)
     if proc.is_alive():
@@ -183,15 +243,27 @@ def analyze_file(
     return FileResult(rel, "Uncertain", reason="analysis_error")
 
 
-def analyze_dir(input_dir: Path, *, timeout_s: int = WORKER_TIMEOUT_DEFAULT) -> list[FileResult]:
+def analyze_dir(
+    input_dir: Path, *, timeout_s: int = WORKER_TIMEOUT_DEFAULT
+) -> tuple[list[FileResult], int]:
     root = Path(input_dir).resolve()
     results: list[FileResult] = []
-    # Skip `<stem>.__relaxed__.sol` ladder copies (stray ones from a killed worker are inputs' shadows).
-    for path in sorted(p for p in root.rglob("*.sol") if p.is_file() and not is_temp_copy(p)):
+    skipped = 0
+    # Follow dir symlinks (Foundry/Hardhat vendored trees) but skip ladder temp copies.
+    for path in _iter_sol_files(root):
+        if is_dependency_target(path, root):
+            skipped += 1
+            continue
         rel = path.relative_to(root).as_posix()
         try:
-            results.append(analyze_file(path, rel, timeout_s=timeout_s))
+            results.append(analyze_file(path, rel, timeout_s=timeout_s, input_root=root))
         except Exception as exc:
             logger.warning("analyze_dir failed for %s: %s", rel, exc)
             results.append(FileResult(rel, "Uncertain", reason="analysis_error"))
-    return results
+    if skipped:
+        logger.info(
+            "skipped %s dependency file(s) under node_modules/ or lib/<pkg>/ "
+            "(analysed as imports only)",
+            skipped,
+        )
+    return results, skipped

@@ -36,11 +36,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--timeout", type=int, default=WORKER_TIMEOUT_DEFAULT)
     parser.add_argument("--no-summary", action="store_true")
     args = parser.parse_args(argv)
-    results = analyze_dir(args.input_dir, timeout_s=args.timeout)
+    results, skipped = analyze_dir(args.input_dir, timeout_s=args.timeout)
     write_results(args.results_json, results)
     if not args.no_summary:
         summary_path = args.results_json.parent / "summary.md"
-        meta = {"name": TOOL_NAME, "version": TOOL_VERSION}
+        meta = {
+            "name": TOOL_NAME,
+            "version": TOOL_VERSION,
+            "skipped_dependency_files": skipped,
+        }
         summary_path.write_text(render_summary(results, meta), encoding="utf-8")
     malicious, uncertain, benign = _count_verdicts(results)
     print(

@@ -35,7 +35,8 @@ def _gating_auth(ctx: ContractContext) -> set[StateVariable]:
         if not privilege.is_privileged(fn):
             continue
         for atom in privilege.auth_atoms(fn):
-            used.add(atom.auth_var)
+            if atom.auth_var is not None:
+                used.add(atom.auth_var)
     return used
 
 
@@ -184,6 +185,7 @@ def OWN_FAKE_RENOUNCE(ctx: ContractContext) -> list[Finding]:
             continue
         node = next(n for _v, n, k in assigns if k == "zero")
         names = ", ".join(v.name for v in uncleared) if uncleared else "nonzero write"
+        extra = ("two_step_handoff",) if roles.two_step_handoff(ctx, fn) else ()
         out.append(
             make_finding(
                 "OWN_FAKE_RENOUNCE",
@@ -191,6 +193,7 @@ def OWN_FAKE_RENOUNCE(ctx: ContractContext) -> list[Finding]:
                 function=function_name(fn),
                 lines=node_lines(node),
                 reasoning=f"{function_name(fn)} zeros an auth var while {names} remains",
+                discriminators=extra,
             )
         )
     return out
@@ -204,9 +207,12 @@ def OWN_REASSIGN_NONSTD(ctx: ContractContext) -> list[Finding]:
         for fn in unprivileged_writers(ctx.contract, var):
             if not ctx.is_from_input_root(fn):
                 continue
-            extra: tuple[str, ...] = ()
+            extra_list: list[str] = []
             if roles.one_shot_initializer(fn):
-                extra = ("one_shot_initializer",)
+                extra_list.append("one_shot_initializer")
+            if roles.two_step_handoff(ctx, fn):
+                extra_list.append("two_step_handoff")
+            extra = tuple(extra_list)
             key = (function_name(fn), var.name)
             if key in seen:
                 continue
@@ -232,6 +238,8 @@ def OWN_REASSIGN_NONSTD(ctx: ContractContext) -> list[Finding]:
             if not ctx.is_from_input_root(fn):
                 continue
             atoms = privilege.auth_atoms(fn)
+            if any(atom.kind == "eq_self" for atom in atoms):
+                continue
             gated_by_var = any(atom.auth_var is var for atom in atoms)
             if gated_by_var:
                 continue
@@ -239,7 +247,12 @@ def OWN_REASSIGN_NONSTD(ctx: ContractContext) -> list[Finding]:
             hits = [item for item in assigns if item[2] == "nonzero"]
             if not hits:
                 continue
-            extra = ("one_shot_initializer",) if roles.one_shot_initializer(fn) else ()
+            extra_list = []
+            if roles.one_shot_initializer(fn):
+                extra_list.append("one_shot_initializer")
+            if roles.two_step_handoff(ctx, fn):
+                extra_list.append("two_step_handoff")
+            extra = tuple(extra_list)
             key = (function_name(fn), var.name)
             if key in seen:
                 continue

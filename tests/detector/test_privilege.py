@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from detector.analysis import privilege
-from tests.detector.analysis_util import fn, svar, tier1_ctx, tier3_ctx
+from tests.detector.analysis_util import fn, make_ctx, svar, tier1_ctx, tier3_ctx
+from tests.detector.conftest import CASES, HARNESS
 
 
 def test_exit_addr_gate_mal(slither_for) -> None:
@@ -97,6 +98,29 @@ def test_unprivileged_writers_follow_internal_callees(slither_for) -> None:
 
     paused = tier1_ctx(slither_for, "EXIT_GLOBAL_SWITCH", "ben")
     assert "_paused" in {v.name for v in paused.privileged_writable}
+
+
+def test_eq_self_timelock(slither_for) -> None:
+    ctx = make_ctx(slither_for, HARNESS / "timelock_self_call" / "MiniTimelock.sol")
+    setter = fn(ctx, "setPendingAdmin")
+    assert privilege.is_privileged(setter)
+    atoms = privilege.auth_atoms(setter)
+    assert any(a.kind == "eq_self" and a.sender_source == "msg.sender" for a in atoms)
+    kinds = {a.kind for a in atoms}
+    assert "eq_self" in kinds
+
+
+def test_or_operands_do_not_privilege_transfer(slither_for) -> None:
+    path = (
+        CASES
+        / "tier2_realworld"
+        / "crpwarner"
+        / "0xD217Dc0cAB1C952a7cE6f4D7ca4549CdE1F37bb0_sol"
+        / "0xD217Dc0cAB1C952a7cE6f4D7ca4549CdE1F37bb0_sol.sol"
+    )
+    ctx = make_ctx(slither_for, path, "BaseToken")
+    transfer = fn(ctx, "transfer", sig="transfer(address,uint256)")
+    assert privilege.is_privileged(transfer) is False
 
 
 def test_sell_only_pair_compare_is_not_atom(slither_for) -> None:

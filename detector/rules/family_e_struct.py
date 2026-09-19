@@ -5,13 +5,16 @@ from __future__ import annotations
 from typing import Any
 
 from slither.core.declarations.function import Function
+from slither.core.declarations.solidity_variables import SolidityVariableComposed
 from slither.core.variables.state_variable import StateVariable
 from slither.slithir.operations import LowLevelCall, SolidityCall
 
 from detector.analysis._ir import (
     SELFDESTRUCT_NAMES,
     assembly_has_delegatecall,
+    depends,
     function_sort_key,
+    guarded_nodes,
     is_address_var,
     is_ctor,
     is_externally_callable,
@@ -23,9 +26,11 @@ from detector.analysis._ir import (
 )
 from detector.analysis.context import ContractContext
 from detector.analysis.flows import value_sends
-from detector.analysis.privilege import auth_atoms
+from detector.analysis.privilege import auth_atoms, branch_atoms, is_privileged
 from detector.model import Finding
 from detector.rules.base import make_finding
+
+_MSG_DATA = SolidityVariableComposed("msg.data")
 
 
 def _source_lines(obj: Any) -> tuple[int, ...]:
@@ -97,6 +102,26 @@ def _is_proxy_fallback(function: Function) -> bool:
     if not function.is_fallback:
         return False
     return _has_delegatecall(function) and _forwards_calldata(function)
+
+
+def _privileged_delegatecall_site(function: Function, node: Any) -> bool:
+    if is_privileged(function):
+        return True
+    if node is None:
+        return False
+    for _atom, if_node in branch_atoms(function):
+        if node in guarded_nodes(if_node):
+            return True
+    return False
+
+
+def _dest_depends_on_param_or_calldata(dest: Any, function: Function) -> bool:
+    if dest is None:
+        return False
+    for param in function.parameters or []:
+        if depends(dest, param, function):
+            return True
+    return depends(dest, _MSG_DATA, function)
 
 
 def _pw_addrs_read(function: Function, ctx: ContractContext) -> list[StateVariable]:
@@ -191,6 +216,7 @@ def struct_delegatecall_settable(ctx: ContractContext) -> list[Finding]:
         if _is_proxy_fallback(function):
             continue
         dests: list[tuple[Any, StateVariable]] = []
+        param_nodes: list[Any] = []
         for node in function.nodes:
             for ir in node.irs:
                 if not isinstance(ir, LowLevelCall):
@@ -200,9 +226,26 @@ def struct_delegatecall_settable(ctx: ContractContext) -> list[Finding]:
                 dest = resolve_state_dest(ir.destination, function)
                 if dest is not None:
                     dests.append((node, dest))
+                if _privileged_delegatecall_site(function, node) and _dest_depends_on_param_or_calldata(
+                    ir.destination, function
+                ):
+                    param_nodes.append(node)
             if assembly_has_delegatecall(node):
                 for var in _pw_addrs_read(function, ctx):
                     dests.append((node, var))
+        for node in param_nodes:
+            add(
+                _emit(
+                    "STRUCT_DELEGATECALL_SETTABLE",
+                    ctx,
+                    function,
+                    node,
+                    (
+                        f"{function.name} delegatecalls a destination that is a "
+                        "caller-supplied parameter of a privileged function"
+                    ),
+                )
+            )
         for node, dest in dests:
             if dest not in ctx.privileged_writable:
                 continue

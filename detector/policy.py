@@ -33,7 +33,6 @@ BOUND_DISCRIMINATORS = frozenset(
 SHAPE_DISCRIMINATORS = frozenset(
     {
         "managed_role",
-        "library_role",
         "issuer_token",
     }
 )
@@ -48,10 +47,10 @@ DOWNGRADE_TABLE: dict[str, str] = {
     "foreign_only": "INFO",
     "no_custody": "MED",
     "managed_role": "MED",
-    "library_role": "MED",
     "issuer_token": "MED",
     "representation_switch": "DROP",
     "one_shot_initializer": "DROP",
+    "two_step_handoff": "DROP",
 }
 
 
@@ -129,18 +128,24 @@ def decide(
 
 
 def finalize(findings: list[Finding]) -> tuple[list[Finding], bool]:
+    surviving: list[Finding] = []
+    for finding in findings:
+        drop_disc = any(DOWNGRADE_TABLE.get(name) == "DROP" for name in finding.discriminators)
+        if drop_disc:
+            out = adjust(finding, concealed=False, downgrade_to=DOWNGRADE_TABLE)
+            if out is not None:
+                surviving.append(out)
+            continue
+        surviving.append(finding)
     concealed = any(
-        finding.rule_id in CONCEALMENT_RULES and finding.severity == "HIGH" for finding in findings
+        finding.rule_id in CONCEALMENT_RULES and finding.severity == "HIGH" for finding in surviving
     )
     adjusted: list[Finding] = []
-    for finding in findings:
+    for finding in surviving:
         if "no_expiry" in finding.discriminators:
             adjusted.append(finding)
             continue
-        drop_disc = any(
-            DOWNGRADE_TABLE.get(name) == "DROP" for name in finding.discriminators
-        )
-        if finding.base_severity == "HIGH" or drop_disc:
+        if finding.base_severity == "HIGH":
             out = adjust(finding, concealed=concealed, downgrade_to=DOWNGRADE_TABLE)
             if out is not None:
                 adjusted.append(out)

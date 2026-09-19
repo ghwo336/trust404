@@ -117,14 +117,14 @@ tools:
 
 ## Report
 
-`bench report` writes, per tool, `reports/<tool>/report.md` + `report.json`: scoring (per tier, per family), coverage (zero-case families/rules, gap list), determinism pass/fail, runtime p50/p95, compile-fail count. Tier 0 weighted highest in the summary line.
+`bench report` writes, per tool, `reports/<tool>/report.md` + `report.json`: scoring (per tier, per family), coverage (zero-case families/rules, gap list), determinism pass/fail, runtime p50/p95, compile-fail count, and (2026-09-20) a `tier0 exact: k/n` gate line next to the weighted score.
 
 ## Corpus tiers
 
-- Tier 0 `cases/tier0_judge/` — Discord public samples (ingest + labels scaffold). Highest weight.
-- Tier 1 `cases/tier1_pairs/<RULE_ID>/` — hand-written malicious + benign twin per rule ID (≤80 lines, pinned pragma). Twins per plan Phase 2.
+- Tier 0 `cases/tier0_judge/` — organizers' public samples (`challenge_public/`, ingested 2026-09-20, labels from the file comments). Weight **1.0** (amended 2026-09-20 from 4.0: five samples must not be 44% of the score); the report prints a separate gate line `tier0 exact: k/n` so 5/5 stays visible.
+- Tier 1 `cases/tier1_pairs/<RULE_ID>/` — hand-written malicious + benign twin per rule ID (≤80 lines, pinned pragma). Twins per plan Phase 2. Under decisive mode (2026-09-20, `detector.md` §policy) the `mal` twins of `HONEYPOT_LEGACY`, `PONZI_SHAPE`, `STRUCT_PROXY_EOA_ADMIN`, `OWN_TX_ORIGIN`, `SLITHER_HIGH_OVERLAY` carry `preferred_verdict: Malicious`; `FEE_ADDR_MUTABLE/mal` carries `preferred_verdict: Benign, accepted: [Benign, Uncertain]` (the rule fires as INFO; `expected_rule_ids` unchanged); `STRUCT_EXTERNAL_GATE/mal` stays Uncertain; `PRIV_ROLE/ben` is re-shaped so its admin role gates a setter off the transfer path (its former shape duplicated `_harness/oz_ownable_rug`, which is Malicious).
 - Tier 2 `cases/tier2_realworld/` — Pied-Piper (200 injected + real), CRPWarner (69), HoneyBadger Table 5 (24). Paper label → family mapping.
-- Tier 3 `cases/tier3_benign_risky/` — real/OZ contracts that look risky, `accepted: [Benign, Uncertain]`.
+- Tier 3 `cases/tier3_benign_risky/` — real/OZ contracts that look risky. Two classes since 2026-09-20: **bounded** (`oz_erc20_pausable_ownable`, `oz_erc20capped_accesscontrol`, `oz_erc20permit`, `reflection_token`, `erc20_foreign_rescue`) keep `preferred: Benign, accepted: [Benign, Uncertain]` and are the false-MALICIOUS brake; **governance-only** (`usdc_fiattoken`, `bancor_smarttoken`, `lido_ldo_minime` — blacklist / burn-other / uncapped mint under a managed role, no code bound) carry `preferred: Malicious, accepted: [Malicious, Benign]` per the organizers' rules 1–2 read literally; either decisive answer is defensible, abstaining is not.
 
 ## Baselines
 
@@ -140,7 +140,8 @@ tools:
 - **BB-4** Coverage lists families and rule IDs with zero cases, plus per-tool gap list.
 - **BB-5** Determinism double-run pass/fail per tool.
 - **BB-6** Tier 1: every rule ID in the catalog has ≥1 malicious and ≥1 benign twin; `bench validate` compiles all.
-- **BB-7** Tier 3: ≥8 risky-benign fixtures with `accepted: [Benign, Uncertain]`.
+- **BB-7** Tier 3: ≥8 risky fixtures; the bounded class carries `accepted: [Benign, Uncertain]`, the governance-only class `accepted: [Malicious, Benign]` (amended 2026-09-20; ≥5 bounded fixtures remain so the false-MALICIOUS brake keeps teeth).
+- **BB-12** (2026-09-20) `TIER_WEIGHTS["tier0_judge"] == 1.0`; `report.md`/`report.json` carry `tier0_exact: k/n` (files whose verdict equals `preferred_verdict`) as its own line under the summary.
 - **BB-8** Tier 0: ingest command + labels scaffold; populated when Discord samples arrive.
 - **BB-9** Tier 2: ≥100 real malicious sources ingested with paper-derived family labels.
 - **BB-10** Baseline tools run end-to-end and appear in the report.

@@ -97,7 +97,7 @@ One result per `.sol` file under the input root (recursive, sorted by relative P
 
 - `analyze_file(path: Path, rel: str, *, timeout_s: int = 120) -> FileResult` — runs `_analyze_in_process` in a child process (`multiprocessing` spawn context); on timeout terminates the child and returns `FileResult(rel, "Uncertain", reason="timeout")`; on child failure returns `Uncertain(analysis_error)` (or `compile_failed` when the failure is a `CompileError`).
 - `_analyze_in_process(path, rel) -> FileResult` — `compile_file_ex` → `target_contracts(slither, result.source_path)` (the input root for provenance stays the original path) → `ContractContext` → run `rules.RULES` → `overlay.run(slither)` → `policy.decide(findings)`. A non-empty `CompileResult.note` is logged at INFO (child and parent) and is not written to results.json — `reason` stays a policy field.
-- `analyze_dir(input_dir: Path, *, timeout_s=120) -> list[FileResult]` — sorted `rglob("*.sol")` minus ladder temp copies (`is_temp_copy`), relative POSIX paths, one result each. Never raises for a bad file.
+- `analyze_dir(input_dir: Path, *, timeout_s=120) -> tuple[list[FileResult], int]` — sorted recursive walk (follows directory symlinks with a cycle guard) minus ladder temp copies (`is_temp_copy`) and minus dependency packages (see the layout paragraph; the second element is the skipped count, surfaced as `meta["skipped_dependency_files"]` and one `summary.md` header line when > 0), relative POSIX paths, one result each. Never raises for a bad file. `analyze_file(..., input_root=)` threads the CLI root to `compile_file_ex(path, input_root=)` so `--allow-paths` and project remaps are root-relative. (Signatures amended 2026-09-20, compile wave.)
 - `target_contracts(slither, path) -> list[Contract]` — contracts whose `source_mapping.filename.absolute` resolves to `path`, excluding interfaces, libraries, and `abstract` contracts.
 
 ### `model.py`
@@ -201,34 +201,37 @@ Two modes, same engine and policy:
 
 Every finding: `contract`, `function` (the function that carries the evidence — for gates the **writer** is one finding and the **impact site** another finding with the same rule_id only if both are needed for `expected_functions`; default: one finding at the writer and one at the impact site), `lines` (source lines of the writer node and the impact node), `reasoning` (names writer, gated var, impact node kind — via the actual identifiers *from the source*, which is reporting, not matching). `discriminators` lists the §6 discriminator names that matched; policy applies them.
 
-### `policy.py`
+### `policy.py` — **decisive mode** (Phase 5; ratified by the owner 2026-09-20 02:55, replaces the Phase 4 concealment ladder below)
 
-- `adjust(finding, ctx_shapes) -> Finding` — applies the discriminator table below; sets `severity`, keeps `base_severity`, sets `counts_for_escalation`.
-- `decide(findings: list[Finding]) -> (verdict, reason)`:
-  1. any finding with `severity == HIGH` → `Malicious`.
-  2. else if `STRUCT_EXTERNAL_GATE` present → `Uncertain`, `reason=external_dependency`.
-  3. else escalation: ≥2 findings with `severity == MED`, `counts_for_escalation`, distinct rule IDs, from ≥2 different families → `Malicious` (`reason=escalated:<ids>`) — unless a **suppressing shape** (`issuer_token` or any `managed_role` downgrade applied in this contract) is present.
-  4. else any MED → `Uncertain`, `reason=med_findings`.
-  5. else any `SLITHER_HIGH_OVERLAY` whose check is an **exploit-shape** check (`reentrancy-eth`, `arbitrary-send-eth`, `arbitrary-send-erc20`, `arbitrary-send-erc20-permit`, `suicidal`, `controlled-delegatecall`, `delegatecall-loop`, `msg-value-loop`, `unprotected-upgrade`, `protected-vars`, `rtlo`) → `Uncertain`, `reason=slither_high`. Other High-impact checks (e.g. `unchecked-transfer`, `uninitialized-state`, `shadowing-state`) are emitted as INFO evidence with discriminator `evidence_only` and never move the verdict (run 1 miss: `DRAIN_APPROVAL_PULL/ben`).
-  6. else `Benign`.
-- Concealment override: if any of {`OWN_HIDDEN_ROLE`, `OWN_FAKE_RENOUNCE`, `VIEW_CALLER_DEPENDENT`, `BAL_TRANSFER_HIDDEN_MINT`, `LEAK_EXEMPT_PATH`, `EXIT_CALLBACK_CYCLE`} fired at HIGH in the contract, **no downgrade applies** to any finding of that contract (disclosed-centralization shapes cannot launder a concealed control).
+Grading is +1 correct / 0 `UNCERTAIN` / −1 wrong (`challenge_public/README.md`). `UNCERTAIN` is an abstain, so a finding set that we fully understand must resolve to `Benign` or `Malicious`. The organizers' boundary rules (§판정 경계) are the SSOT where they speak: symmetric or code-bounded privilege is BENIGN; asymmetric or unbounded privilege over user assets / exits is MALICIOUS; "vulnerabilities and privileged functions" count as MALICIOUS when such a path exists; centralization notes on a BENIGN verdict are free.
 
-### Judge alignment (amended 2026-09-20 from `challenge_public/README.md` §판정 경계; grading is +1 correct / 0 UNCERTAIN / −1 wrong)
+- `adjust(finding, ctx_shapes) -> Finding` — applies the discriminator classes below; sets `severity ∈ {HIGH, INFO}` for verdict purposes, keeps `base_severity` and the matched discriminator names for reporting.
+- **Counting finding**: a finding whose rule is HIGH-base, **or** one of the decisive MED rules {`HONEYPOT_LEGACY`, `PONZI_SHAPE`, `STRUCT_PROXY_EOA_ADMIN`, `OWN_TX_ORIGIN`, `EXIT_TIME_GATE` only with `no_expiry`}, **or** a `SLITHER_HIGH_OVERLAY` exploit-shape check (`reentrancy-eth`, `arbitrary-send-eth`, `arbitrary-send-erc20`, `arbitrary-send-erc20-permit`, `suicidal`, `controlled-delegatecall`, `unprotected-upgrade`), **and** no bounding discriminator applies to it.
+- **Bounding discriminators** (the power is limited by code or is not a user-asset path → `INFO`, evidence only): `constant_cap`, `fee_cap`, `constant_floor`, `bounded_window`, `ungate_exists` (only when no `priv_bypass`), `no_custody`, `foreign_only`, `two_step_handoff`, `one_shot_initializer`, `representation_switch`. `priv_bypass` (owner-exempt gate) cancels `ungate_exists`/`constant_floor`/`bounded_window`: an asymmetric restriction is the organizers' rule-1 MALICIOUS.
+- **Governance discriminators** (who holds the power, not how much → recorded, **no downgrade**): `managed_role`, `issuer_token`, `role_separated_cap`. They drive the reason text ("role-separated; still unbounded") and `risk_type: CENTRALIZATION`, never the verdict. Provenance (`library_role`) is not a signal at all.
+- `decide(findings) -> (verdict, reason)`:
+  1. any counting finding → `Malicious` (`reason=""`; the HIGH rule ids are the reason).
+  2. else `STRUCT_EXTERNAL_GATE` present → `Uncertain`, `reason=external_dependency` (the one analytic abstain: behaviour lives in code we cannot see).
+  3. else `Benign`. INFO findings (bounded controls, `PRIV_ROLE`, non-exploit Slither checks with `evidence_only`, `FEE_ADDR_MUTABLE`) are reported as evidence.
+  Engine-level abstains stay: `compile_failed`, `timeout`, `analysis_error`.
+- Retired: the MED verdict class, `med_findings`, `slither_high` as a verdict reason, escalation (`counts_for_escalation`), the concealment override (nothing is downgraded that it needs to protect; the concealment rules simply stay HIGH). `FEE_ADDR_MUTABLE` is INFO always (recipient redirect of an already-charged fee is not a user-asset path; the amount is `FEE_UNBOUNDED`'s job).
 
-The organizers' verdict boundaries are an SSOT above our doctrine where they are explicit. Three of their four rules are explicit and change the discriminator table; the fourth (centralization notes on BENIGN are free) is already how we report.
+Corpus consequences (labels amended in the same change set; see `baybench.md` and `docs/bench/misses.md`): `tier0/P4` → Benign; Tier 1 `ben` twins with bounded controls → Benign (their preferred value); Tier 1 `mal` twins of the decisive MED rules → preferred Malicious; `FEE_ADDR_MUTABLE/mal` → preferred Benign; Tier 3 `usdc_fiattoken`, `bancor_smarttoken`, `lido_ldo_minime` → preferred Malicious, accepted [Malicious, Benign]; the other five Tier 3 files must stay Benign with **zero HIGH** (the −1 brake). `PRIV_ROLE/ben` is re-shaped so its documented admin role gates a non-transfer-path setter (its old shape — admin blacklist on `transfer` — is `_harness/oz_ownable_rug` with a different role library and is Malicious).
 
-| Organizer rule | Effect on `adjust`/`decide` | Corpus proof |
-|---|---|---|
-| 2. A mint whose cap is **enforced in code** is BENIGN (dilution inside the cap may be noted). | `constant_cap` on `BAL_PRIV_MINT` → **INFO** (was MED). The cap must be `constant`/`immutable`/supply-derived (`is_constant_bound`); a settable cap variable is not a cap and the finding stays HIGH. `role_separated_cap` (USDC `minterAllowed`, settable by another role) stays MED. | `tier0/P4_CappedMint` → Benign; `tier1/BAL_PRIV_MINT/ben` → Benign; `tier3/oz_erc20capped_accesscontrol` → Benign |
-| 1. A **symmetric** availability restriction (pause/freeze/limit that binds the owner too) is BENIGN; an **asymmetric** one (owner exempt) is MALICIOUS. | `ungate_exists` on `EXIT_GLOBAL_SWITCH` → **INFO** when no `priv_bypass` (was MED); `constant_floor` / `bounded_window` on `EXIT_AMOUNT_LIMIT` → **INFO** when no `priv_bypass`. `priv_bypass` (owner-exempt gate; see 4d amends) blocks every downgrade → HIGH. A switch with **no** ungate stays HIGH (one-way freeze after the owner has exited is the rug primitive; the organizers' "symmetric" wording presumes recoverability). | `tier1/EXIT_GLOBAL_SWITCH/ben`, `tier1/EXIT_AMOUNT_LIMIT/ben`, `tier3/oz_erc20_pausable_ownable` → Benign; `_harness/trading_switch_owner_bypass` → Malicious |
-| 3. ETH force-sent into a contract with **no deposit path** is not user money; the owner recovering it is not theft. | `no_custody` on `LEAK_PRIV_SWEEP` → **INFO** (was MED). | `tier1/LEAK_PRIV_SWEEP/ben` → Benign |
-| — | `managed_role`, `issuer_token`, `external_dependency`, `two_step_handoff`-adjacent shapes are **not** addressed by the organizers' rules and stay MED → UNCERTAIN (0 points, no −1). Blacklists under a managed compliance role (USDC) are the organizers' likely "benign-but-risky trap" **or** their "targeted honeypot" — undecidable from the README; UNCERTAIN is the expected-value-neutral verdict. | `tier3/usdc_fiattoken`, `bancor_smarttoken`, `lido_ldo_minime` stay Uncertain |
+<details>
+<summary>Phase 4 concealment ladder (superseded 2026-09-20; kept for the record)</summary>
 
-Escalation (step 3) counts only findings that are still MED after this table; a contract whose only findings became INFO under rules 1–3 is BENIGN. The Tier 1 `ben` twins already carry `preferred_verdict: Benign`, so this moves the bench toward its own labels; no label changes.
+- `decide`: HIGH → Malicious; else `STRUCT_EXTERNAL_GATE` → Uncertain(external_dependency); else ≥2 native MEDs from two families → Malicious(escalated) unless `issuer_token`/`managed_role` present; else any MED → Uncertain(med_findings); else exploit-shape overlay → Uncertain(slither_high); else Benign.
+- Concealment override: `OWN_HIDDEN_ROLE`, `OWN_FAKE_RENOUNCE`, `VIEW_CALLER_DEPENDENT`, `BAL_TRANSFER_HIDDEN_MINT`, `LEAK_EXEMPT_PATH`, `EXIT_CALLBACK_CYCLE` at HIGH blocked every downgrade in the contract.
+- Interim "judge alignment" table (same day, earlier): `constant_cap`, `ungate_exists`, `constant_floor`, `bounded_window`, `no_custody` → INFO; `managed_role`/`issuer_token` kept MED → Uncertain. Superseded by decisive mode above (owner chose MALICIOUS for the governance-only shapes).
+
+</details>
 
 ## Rule table (all 29 catalog IDs; base severity = catalog)
 
 Notation: PW = privileged-writable state var (`privilege.privileged_writable`); TP = transfer path; EN = end node on TP; `bal` = bound balance mapping(s).
+
+**Reading the discriminator column under decisive mode (2026-09-20):** every "→MED" written below is the Phase 4 notation and now resolves per the `policy.py` classes — a **bounding** discriminator (`constant_cap`, `fee_cap`, `constant_floor`, `bounded_window`, `ungate_exists` without `priv_bypass`, `no_custody`, `foreign_only`, `two_step_handoff`, `one_shot_initializer`, `representation_switch`) makes the finding INFO; a **governance** discriminator (`managed_role`, `issuer_token`, `role_separated_cap`) leaves it HIGH and only annotates the reason. The triggers themselves are unchanged. `MED`-base rules count toward Malicious only if listed as decisive in `policy.py` (`HONEYPOT_LEGACY`, `PONZI_SHAPE`, `STRUCT_PROXY_EOA_ADMIN`, `OWN_TX_ORIGIN`, `EXIT_TIME_GATE` with `no_expiry`); `FEE_ADDR_MUTABLE` is INFO; `STRUCT_EXTERNAL_GATE` is the `external_dependency` abstain.
 
 | Rule | Fam | Base | Trigger (structural) | Discriminators → effect |
 |---|---|---|---|---|
@@ -305,7 +308,7 @@ Sorted file walk; sorted contract/function iteration (by `source_mapping` start)
 | DT-2 | `_harness/compile_fail` → Uncertain(`compile_failed`); `STRUCT_EXTERNAL_GATE/mal` → Uncertain(`external_dependency`); `oz_import` and `multi_file` are not Malicious | OPEN |
 | DT-3 | Tier 1 rule recall = 1.0 (every `mal` twin fires its `expected_rule_id`); floor 0.9 | OPEN |
 | DT-4 | Tier 1 benign twins: HIGH-FP rate = 0; floor ≤ 0.05 | OPEN |
-| DT-5 | Tier 3: HIGH-FP rate = 0; every fixture Benign or Uncertain | OPEN |
+| DT-5 | Tier 3: HIGH-FP rate = 0 on the five bounded fixtures (`oz_erc20_pausable_ownable`, `oz_erc20capped_accesscontrol`, `oz_erc20permit`, `reflection_token`, `erc20_foreign_rescue`), each Benign; the three governance-only fixtures (`usdc_fiattoken`, `bancor_smarttoken`, `lido_ldo_minime`) resolve to Malicious or Benign, never Uncertain (amended 2026-09-20 with the label change in `baybench.md`) | OPEN |
 | DT-6 | Tier 2 family recall ≥ 0.6 on the compiling sources; per-family numbers recorded; every miss bucketed | OPEN |
 | DT-7 | Evidence hit rate ≥ 0.9 on Tier 1 `mal` (`expected_functions`); every finding has contract, function, lines, reasoning | OPEN |
 | DT-8 | Name-agnostic: identifier-renaming test on `PRIV_ROLE`, `OWN_HIDDEN_ROLE`, `OWN_TX_ORIGIN`, `EXIT_ADDR_GATE` mal fixtures yields identical rule IDs; no rule module contains identifier-name matching | OPEN |
@@ -314,7 +317,9 @@ Sorted file walk; sorted contract/function iteration (by `source_mapping` start)
 | DT-11 | Judge packaging: one `docker run --rm --network none -v in:/input:ro -v out:/output trust404/detector` produces `results.json` and a human-readable `summary.md`; README explains verdict derivation | OPEN |
 | DT-12 | Iterate loop evidenced: `docs/bench/misses.md` has one triaged row per first-run gap with bucket, fix, status; `reports/detector/` committed | OPEN |
 | DT-13 | **Submission contract** (added 2026-09-20 from `challenge_public/`): `./run.sh <dir>` and `docker run --rm --network none -v <dir>:/input:ro trust404/detector` print one `schema.json`-valid JSON array to stdout (logs on stderr, exit 0); `MALICIOUS` objects carry evidence with in-range lines; only top-level `*.sol` are emitted with basename `file`; global budget yields the array before the organizers' 10-min kill | OPEN |
-| DT-14 | **Tier 0 = 5/5** on the public samples with the organizers' labels (`P1`, `P4` BENIGN; `P2`, `P3`, `P5` MALICIOUS), `reasons` non-empty and consistent with the verdict for every file; Tier 1/3 verdicts move only toward `preferred_verdict` under the judge-alignment table | OPEN |
+| DT-14 | **Tier 0 = 5/5** on the public samples with the organizers' labels (`P1`, `P4` BENIGN; `P2`, `P3`, `P5` MALICIOUS), `reasons` non-empty and consistent with the verdict for every file; Tier 1/3 verdicts move only toward `preferred_verdict` under decisive mode | OPEN |
+| DT-15 | **Decisive** (2026-09-20): across Tiers 0–3, `Uncertain` appears only with reason ∈ {`compile_failed`, `timeout`, `analysis_error`, `external_dependency`}; Tier 1 rule recall stays 1.0; the five bounded Tier 3 fixtures are Benign with zero HIGH | OPEN |
+| DT-16 | **Bench doctrine sync** (2026-09-20): the label amendments (Tier 1 decisive-MED `mal` twins, `FEE_ADDR_MUTABLE/mal`, `PRIV_ROLE/ben` re-shape, Tier 3 governance trio) and `scoring.py` Tier 0 weight 1.0 + `tier0 exact k/n` gate line land in the same commit as the policy; `bench validate` clean on all tiers; `docs/bench/misses.md` carries one row per moved verdict citing the organizers' rule | OPEN |
 
 ## Phasing (ordering only; no row is dropped)
 
@@ -324,6 +329,7 @@ Sorted file walk; sorted contract/function iteration (by `source_mapping` start)
 - 4d Iterate on Tier 2/3 with `docs/bench/misses.md`. → DT-6, DT-7, DT-9, DT-10, DT-12.
 - 4e Packaging: `summary.md`, README. → DT-11.
 - 4f Submission alignment (public set arrived 2026-09-20): `judge.schema.json` adapter + `run.sh` + Docker entrypoint, judge-alignment discriminator table, `STRUCT_DELEGATECALL_SETTABLE` parameter form, Tier 0 ingested. → DT-13, DT-14.
+- 5 Decisive mode (owner-ratified 2026-09-20 02:55; plan `track_1_phase_5_decisive_submission`): policy split into bounding vs governance discriminators, MED verdict class retired, label + weight amendments, submission adapter, all-tier rerun, Docker final. → DT-13, DT-14, DT-15, DT-16 and closes DT-1, DT-9..DT-12.
 
 ## Known risks (recorded, not scope changes)
 

@@ -8,18 +8,24 @@ from slither.core.declarations.function import Function
 from slither.core.variables.state_variable import StateVariable
 from slither.slithir.operations import (
     Assignment,
+    Binary,
     EventCall,
     HighLevelCall,
+    Index,
     InternalCall,
     LibraryCall,
     LowLevelCall,
+    Return,
     Send,
     Transfer,
     Unary,
 )
+from slither.slithir.operations.binary import BinaryType
 from slither.slithir.operations.unary import UnaryType
+from slither.slithir.variables.constant import Constant
 
 from detector.analysis._ir import (
+    MSG_SENDER,
     MSG_VALUE,
     assert_never,
     branch_reverts_before_write,
@@ -28,14 +34,19 @@ from detector.analysis._ir import (
     depends,
     false_son,
     fn_ir,
+    index_chain,
+    is_addr_bool_mapping,
     is_bool_type,
     is_ctor,
+    is_externally_callable,
     is_if_node,
     is_modifier,
+    is_msg_sender,
     is_msg_value,
     is_require_assert_node,
     is_uint_type,
     iter_internal_callees,
+    returns_sender_source,
     root_state,
     sorted_vars,
     true_son,
@@ -43,8 +54,12 @@ from detector.analysis._ir import (
     values_feeding_condition,
 )
 from detector.analysis.balances import balance_writes
-from detector.analysis.privilege import auth_atoms, is_privileged, privileged_writes
-from detector.analysis.transfer_path import EndNode
+from detector.analysis.privilege import (
+    auth_atoms,
+    is_privileged,
+    privileged_writable,
+    privileged_writes,
+)
 
 
 def library_role(ctx: Any, function: Function) -> bool:
@@ -80,23 +95,133 @@ def one_shot_initializer(function: Function) -> bool:
     return False
 
 
+def _returns_map_field(callee: Function, auth_var: StateVariable) -> bool:
+    """True if `callee` returns a non-bool field loaded from `auth_var` (adminRole)."""
+    values = list(callee.return_values or [])
+    for node in callee.nodes:
+        for ir in node.irs:
+            if isinstance(ir, Return):
+                values.extend(ir.values)
+    if not values or any(is_bool_type(getattr(val, "type", None)) for val in values):
+        return False
+    return any(root_state(val, callee) is auth_var for val in values)
+
+
+def _role_admin_gate(function: Function, auth_var: StateVariable) -> bool:
+    """OZ AccessControl: gated by hasRole(getRoleAdmin(role), sender) — same mapping,
+    key is a non-bool field read of that mapping, not a constant role id."""
+    if not any(a.auth_var is auth_var and a.kind == "map_bool" for a in auth_atoms(function)):
+        return False
+    for site in _function_and_callees(function):
+        for node in site.nodes:
+            for ir in node.irs:
+                if not isinstance(ir, (InternalCall, LibraryCall)):
+                    continue
+                callee = callee_of(ir)
+                if callee is not None and _returns_map_field(callee, auth_var):
+                    return True
+    return False
+
+
+def _is_sender_expr(var: Any, function: Function) -> bool:
+    helper = fn_ir(function)
+    if is_msg_sender(var) or is_msg_sender(helper.unwrap(var)):
+        return True
+    ir = helper.def_of(var)
+    if isinstance(ir, (InternalCall, LibraryCall)):
+        callee = callee_of(ir)
+        if callee is not None and returns_sender_source(callee) == "msg.sender":
+            return True
+    return False
+
+
+def _sender_eq_params(function: Function) -> set:
+    found: set = set()
+    for site in _function_and_callees(function):
+        helper = fn_ir(site)
+        params = set(site.parameters or [])
+        for node in site.nodes:
+            for ir in node.irs:
+                if not isinstance(ir, Binary) or ir.type != BinaryType.EQUAL:
+                    continue
+                left, right = ir.variable_left, ir.variable_right
+                for side, other in ((left, right), (right, left)):
+                    if not _is_sender_expr(side, site):
+                        continue
+                    cur = helper.unwrap(other)
+                    if other in params or cur in params:
+                        found.add(other)
+                        found.add(cur)
+    pending = True
+    while pending:
+        pending = False
+        for site in _function_and_callees(function):
+            helper = fn_ir(site)
+            for ir, callee in iter_internal_callees(site):
+                args = list(ir.arguments or [])
+                dests = list(callee.parameters or [])
+                for idx, param in enumerate(dests):
+                    if idx >= len(args):
+                        break
+                    arg = args[idx]
+                    if arg in found or helper.unwrap(arg) in found:
+                        if param not in found:
+                            found.add(param)
+                            pending = True
+    return found
+
+
+def _sender_slot_only(function: Function, auth_var: StateVariable) -> bool:
+    sender_params = _sender_eq_params(function)
+    wrote_sender = False
+    wrote_other = False
+    for site in _function_and_callees(function):
+        helper = fn_ir(site)
+        for node in site.nodes:
+            for ir in node.irs:
+                if not isinstance(ir, Assignment):
+                    continue
+                if root_state(ir.lvalue, site) is not auth_var:
+                    continue
+                _root, keys = index_chain(ir.lvalue, site)
+                if keys and any(
+                    is_msg_sender(key)
+                    or depends(key, MSG_SENDER, site)
+                    or key in sender_params
+                    or helper.unwrap(key) in sender_params
+                    for key in keys
+                ):
+                    wrote_sender = True
+                else:
+                    wrote_other = True
+    return wrote_sender and not wrote_other
+
+
 def managed_role(ctx: Any, auth_var: StateVariable) -> bool:
     writers: list[Function] = []
     for fn in unique_functions(ctx.contract):
-        if is_ctor(fn) or is_modifier(fn):
+        if is_ctor(fn) or is_modifier(fn) or not is_externally_callable(fn):
             continue
         if one_shot_initializer(fn):
             continue
-        if auth_var in fn.state_variables_written or auth_var in fn.all_state_variables_written():
-            writers.append(fn)
+        if auth_var not in fn.state_variables_written and auth_var not in fn.all_state_variables_written():
+            continue
+        if not is_privileged(fn) and _sender_slot_only(fn, auth_var):
+            continue
+        writers.append(fn)
     if not writers:
         return False
     for fn in writers:
         if not is_privileged(fn):
             return False
-        others = [atom.auth_var for atom in auth_atoms(fn) if atom.auth_var is not auth_var]
-        if not others:
-            return False
+        others = [
+            atom.auth_var
+            for atom in auth_atoms(fn)
+            if atom.auth_var is not None and atom.auth_var is not auth_var
+        ]
+        if others or _role_admin_gate(fn, auth_var):
+            continue
+        return False
     return True
 
 
@@ -236,7 +361,7 @@ def _var_negated_in(node, function: Function, var: StateVariable) -> bool | None
     return negated
 
 
-def _permissive_value(end_node: EndNode, var: StateVariable) -> bool | None:
+def _permissive_value(end_node: Any, var: StateVariable) -> bool | None:
     node = end_node.node
     function = node.function
     negated = _var_negated_in(node, function, var)
@@ -281,7 +406,7 @@ def _write_can_set(pw, permissive: bool) -> bool:
     return False
 
 
-def ungate_exists(ctx: Any, var: StateVariable, end_node: EndNode) -> bool:
+def ungate_exists(ctx: Any, var: StateVariable, end_node: Any) -> bool:
     if not is_bool_type(var.type):
         return False
     permissive = _permissive_value(end_node, var)
@@ -293,5 +418,103 @@ def ungate_exists(ctx: Any, var: StateVariable, end_node: EndNode) -> bool:
         if pw.mode not in ("function", "branch"):
             assert_never(pw.mode)
         if _write_can_set(pw, permissive):
+            return True
+    return False
+
+
+def privileged_blocking_writable(ctx: Any, var: StateVariable, end_node: Any) -> bool:
+    """Gate var: a privileged writer can store the blocking polarity, even with an
+    unprivileged writer. Numeric/time/address gates keep privileged_writable exclusivity."""
+    if var.is_constant or var.is_immutable:
+        return False
+    if is_bool_type(var.type) or is_addr_bool_mapping(var):
+        permissive = _permissive_value(end_node, var)
+        if permissive is None:
+            return False
+        blocking = not permissive
+        return any(pw.var is var and _write_can_set(pw, blocking) for pw in privileged_writes(ctx.contract))
+    return var in privileged_writable(ctx.contract)
+
+
+def _is_zero_value(var: Any, function: Function) -> bool:
+    if var is None:
+        return False
+    helper = fn_ir(function)
+    cur = helper.unwrap(var)
+    for cand in (var, cur):
+        if isinstance(cand, Constant) and (cand.value == 0 or cand.value is False):
+            return True
+    ir = helper.def_of(var)
+    if ir is not None and type(ir).__name__ == "TypeConversion":
+        return _is_zero_value(getattr(ir, "variable", None), function)
+    return False
+
+
+def _clears_var(function: Function, var: StateVariable) -> bool:
+    for site in _function_and_callees(function):
+        helper = fn_ir(site)
+        for node in site.nodes:
+            for ir in node.irs:
+                if isinstance(ir, Unary):
+                    name = str(getattr(ir.type, "name", ir.type)).upper()
+                    if "DELETE" in name:
+                        root = root_state(getattr(ir, "lvalue", None), site) or root_state(
+                            getattr(ir, "rvalue", None), site
+                        )
+                        if root is var:
+                            return True
+                if not isinstance(ir, Assignment):
+                    continue
+                root = ir.lvalue if ir.lvalue is var else root_state(ir.lvalue, site)
+                if root is var and (
+                    _is_zero_value(ir.rvalue, site) or _is_zero_value(helper.unwrap(ir.rvalue), site)
+                ):
+                    return True
+    return False
+
+
+def _assigns_sender_or_p(function: Function, pending: StateVariable, auth: set) -> bool:
+    for site in _function_and_callees(function):
+        helper = fn_ir(site)
+        for node in site.nodes:
+            for ir in node.irs:
+                if not isinstance(ir, Assignment):
+                    continue
+                root = ir.lvalue if isinstance(ir.lvalue, StateVariable) else root_state(ir.lvalue, site)
+                if not isinstance(root, StateVariable) or root is pending or root not in auth:
+                    continue
+                rval = helper.unwrap(ir.rvalue)
+                if is_msg_sender(ir.rvalue) or is_msg_sender(rval):
+                    return True
+                if rval is pending or ir.rvalue is pending or root_state(rval, site) is pending:
+                    return True
+                if depends(ir.rvalue, MSG_SENDER, site) or depends(rval, MSG_SENDER, site):
+                    return True
+                if depends(ir.rvalue, pending, site) or depends(rval, pending, site):
+                    return True
+    return False
+
+
+def two_step_handoff(ctx: Any, function: Function) -> bool:
+    atoms = [a for a in auth_atoms(function) if a.auth_var is not None]
+    if not atoms:
+        return False
+    auth_set = {v for v in ctx.auth_vars if v is not None}
+    seen: set[int] = set()
+    for atom in atoms:
+        pending = atom.auth_var
+        if pending is None or id(pending) in seen:
+            continue
+        seen.add(id(pending))
+        shared = False
+        for fn in unique_functions(ctx.contract):
+            if fn is function or is_ctor(fn) or is_modifier(fn) or not is_privileged(fn):
+                continue
+            if any(a.auth_var is pending for a in auth_atoms(fn)):
+                shared = True
+                break
+        if shared:
+            continue
+        if _assigns_sender_or_p(function, pending, auth_set) and _clears_var(function, pending):
             return True
     return False

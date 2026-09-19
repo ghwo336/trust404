@@ -71,14 +71,12 @@ def shape_discriminators(ctx, function) -> tuple[str, ...]:
     auth = []
     seen: set[int] = set()
     for atom in atoms:
-        if id(atom.auth_var) in seen:
+        if atom.auth_var is None or id(atom.auth_var) in seen:
             continue
         seen.add(id(atom.auth_var))
         auth.append(atom.auth_var)
-    if auth and all(roles.managed_role(ctx, var) for var in auth):
+    if auth and all(var is not None and roles.managed_role(ctx, var) for var in auth):
         discs.append("managed_role")
-    if roles.library_role(ctx, function):
-        discs.append("library_role")
     return tuple(discs)
 
 
@@ -92,8 +90,6 @@ def combined_shape_discriminators(ctx, functions) -> tuple[str, ...]:
         shared = set.intersection(*per) if per else set()
         if "managed_role" in shared:
             discs.append("managed_role")
-        if "library_role" in shared:
-            discs.append("library_role")
     if roles.issuer_token(ctx):
         discs.append("issuer_token")
     return tuple(discs)

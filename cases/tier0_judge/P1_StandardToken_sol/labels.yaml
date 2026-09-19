@@ -2,5 +2,8 @@ id: tier0/P1_StandardToken_sol
 file: P1_StandardToken_sol.sol
 solc: 0.8.24
 preferred_verdict: Benign
-accepted_verdicts:
-- Benign
+accepted_verdicts: [Benign]
+expected_families: []
+expected_rule_ids: []
+expected_functions: []
+source: "organizers' public sample P1: minimal ERC20, no privileged role, fixed supply"

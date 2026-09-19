@@ -1,0 +1,9 @@
+id: tier1/_harness/trading_switch_owner_bypass
+file: TradingSwitchBypass.sol
+preferred_verdict: Malicious
+accepted_verdicts: [Malicious]
+expected_families: [A]
+expected_rule_ids: [EXIT_GLOBAL_SWITCH]
+expected_functions: [setTrading, _transfer]
+source: "harness: owner-exempt trading switch (state_gate || auth) is a sell-block, not a pause"
+solc: "0.8.20"

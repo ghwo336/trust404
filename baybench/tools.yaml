@@ -14,4 +14,4 @@ tools:
     cmd: ".venv/bin/python -m detector.cli {input} {output}/results.json"
   - name: noexit
     image: t404/noexit:latest
-    cmd: "node /Users/gjowehgqh/T404/dist/cli.js baybench {input} {output}/results.json"
+    cmd: "node /Users/gjowehgqh/T404/dist/baybench.js {input} {output}/results.json"

@@ -2,5 +2,8 @@ id: tier0/P3_Honeypot_sol
 file: P3_Honeypot_sol.sol
 solc: 0.8.24
 preferred_verdict: Malicious
-accepted_verdicts:
-- Malicious
+accepted_verdicts: [Malicious]
+expected_families: [A]
+expected_rule_ids: [EXIT_ADDR_GATE]
+expected_functions: [setWhitelist, transfer]
+source: "organizers' public sample P3: transfer requires sender whitelist; only a privileged writer updates the list"

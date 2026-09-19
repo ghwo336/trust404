@@ -6,12 +6,13 @@ from typing import Any
 
 from slither.core.declarations.function import Function
 from slither.core.variables.state_variable import StateVariable
-from slither.slithir.operations import Binary
+from slither.slithir.operations import Binary, Index
 from slither.slithir.operations.binary import BinaryType
 
 from detector.analysis import roles
 from detector.analysis._ir import (
     MSG_SENDER,
+    MSG_VALUE,
     assert_never,
     depends,
     false_son,
@@ -22,6 +23,7 @@ from detector.analysis._ir import (
     is_ctor,
     is_modifier,
     is_msg_sender,
+    is_msg_value,
     is_return_node,
     is_this_expr,
     iter_internal_callees,
@@ -78,15 +80,13 @@ def _shape_discs(ctx: ContractContext, function: Function) -> list[str]:
     found: list[str] = []
     if roles.issuer_token(ctx):
         found.append("issuer_token")
-    if roles.library_role(ctx, function):
-        found.append("library_role")
     for atom in auth_atoms(function):
-        if roles.managed_role(ctx, atom.auth_var):
+        if atom.auth_var is not None and roles.managed_role(ctx, atom.auth_var):
             found.append("managed_role")
             break
     else:
         for atom, _node in branch_atoms(function):
-            if roles.managed_role(ctx, atom.auth_var):
+            if atom.auth_var is not None and roles.managed_role(ctx, atom.auth_var):
                 found.append("managed_role")
                 break
     return found
@@ -356,6 +356,37 @@ def leak_exempt_path(ctx: ContractContext) -> list[Finding]:
     return findings
 
 
+def _caller_ledger_amount(amount: Any, function: Function, ctx: ContractContext) -> bool:
+    if amount is None:
+        return False
+    helper = fn_ir(function)
+    cur = helper.unwrap(amount)
+    if is_msg_value(amount) or is_msg_value(cur):
+        return True
+    if depends(amount, MSG_VALUE, function) or depends(cur, MSG_VALUE, function):
+        return True
+    for node in function.nodes:
+        for ir in node.irs:
+            if not isinstance(ir, Index) or ir.lvalue is None:
+                continue
+            if not _sender_dependent(ir.variable_right, function):
+                continue
+            if amount is ir.lvalue or cur is ir.lvalue or depends(amount, ir.lvalue, function):
+                return True
+    return any(depends(amount, bal, function) and _sender_dependent(amount, function) for bal in ctx.bindings.balance_vars)
+
+
+def _unbounded_drain_amount(amount: Any, function: Function, ctx: ContractContext) -> bool:
+    if amount is None or _caller_ledger_amount(amount, function, ctx):
+        return False
+    helper = fn_ir(function)
+    cur = helper.unwrap(amount)
+    params = list(function.parameters or [])
+    if any(amount is p or cur is p or depends(amount, p, function) for p in params):
+        return True
+    return root_state(amount, function) is not None or root_state(cur, function) is not None
+
+
 def leak_priv_sweep(ctx: ContractContext) -> list[Finding]:
     findings: list[Finding] = []
     seen: set[str] = set()
@@ -373,7 +404,7 @@ def leak_priv_sweep(ctx: ContractContext) -> list[Finding]:
                     continue
                 if kind not in ("transfer", "send", "call_value"):
                     assert_never(kind)
-                if not is_whole_pot(value, site):
+                if not is_whole_pot(value, site) and not _unbounded_drain_amount(value, site, ctx):
                     continue
                 hit = True
                 impact = site

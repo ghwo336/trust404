@@ -39,3 +39,4 @@ def test_cli_harness_writes_results_and_summary(tmp_path) -> None:
     assert files == expected
     assert malicious + uncertain + benign == expected
     assert uncertain >= 1  # compile_fail/broken.sol is always Uncertain(compile_failed)
+    assert "Skipped" not in summary_path.read_text(encoding="utf-8")

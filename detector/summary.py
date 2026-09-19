@@ -307,7 +307,14 @@ def render_summary(results: list[FileResult], meta: dict) -> str:
     ordered = sorted(results, key=lambda item: (_verdict_rank(item.verdict), item.file))
     entries = [_entry(result) for result in ordered]
     lines: list[str] = [f"# {name} {version} — offline static analysis report", ""]
-    lines += _legend(entries) + [""]
+    lines += _legend(entries)
+    skipped = int(meta.get("skipped_dependency_files") or 0)
+    if skipped > 0:
+        lines.append(
+            f"- Skipped {skipped} dependency file(s) under node_modules/ or lib/<pkg>/ "
+            f"(analysed as imports only)."
+        )
+    lines += [""]
     lines += _overview(entries)
     if entries:
         lines += ["## Findings", ""]

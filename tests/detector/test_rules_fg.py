@@ -10,7 +10,7 @@ from tests.detector.analysis_util import make_ctx, tier1_ctx, tier3_ctx
 from tests.detector.conftest import TIER1, TIER3
 
 _DOWNGRADE = frozenset(
-    {"foreign_only", "no_custody", "issuer_token", "managed_role", "library_role"}
+    {"foreign_only", "no_custody", "issuer_token", "managed_role"}
 )
 
 _TIER3 = (

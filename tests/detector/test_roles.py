@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from detector.analysis import roles
 from detector.analysis.privilege import auth_vars
-from tests.detector.analysis_util import fn, svar, tier1_ctx, tier3_ctx
+from tests.detector.analysis_util import fn, make_ctx, svar, tier1_ctx, tier3_ctx
+from tests.detector.conftest import HARNESS
 
 
 def _bool_end(ctx, var_name: str):
@@ -53,6 +54,14 @@ def test_library_role(slither_for) -> None:
     assert roles.library_role(ben, fn(ben, "setBlacklist")) is True
     mal = tier1_ctx(slither_for, "PRIV_ROLE", "mal")
     assert roles.library_role(mal, fn(mal, "setBlacklist")) is False
+
+
+def test_two_step_handoff(slither_for) -> None:
+    lock = make_ctx(slither_for, HARNESS / "timelock_self_call" / "MiniTimelock.sol")
+    assert roles.two_step_handoff(lock, fn(lock, "acceptAdmin")) is True
+    assert roles.two_step_handoff(lock, fn(lock, "setPendingAdmin")) is False
+    mal = tier1_ctx(slither_for, "OWN_FAKE_RENOUNCE", "mal")
+    assert roles.two_step_handoff(mal, fn(mal, "renounceOwnership")) is False
 
 
 def test_one_shot_initializer(slither_for) -> None:

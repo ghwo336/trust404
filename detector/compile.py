@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -51,6 +52,8 @@ _RELAX_MARKER = "requires different compiler version"
 _SPDX_MARKER = "Multiple SPDX license identifiers"
 _FIX_RELAX = "relax"
 _FIX_SPDX = "spdx"
+_FIX_BOM = "bom"
+_IMPORT_RE = re.compile(r"""import\s+(?:\{[^}]*\}\s+from\s+)?["']([^"']+)["']""")
 
 Version = tuple[int, int, int]
 Constraint = tuple[str, Version]  # op in {">=", ">", "<=", "<", "="}
@@ -218,6 +221,8 @@ def solc_binary(version: str) -> Path:
 
 def _oz_dir() -> Path | None:
     env = os.environ.get("DETECTOR_OZ_DIR")
+    if env is not None and not env.strip():
+        return None
     candidates = []
     if env:
         candidates.append(Path(env))
@@ -235,6 +240,149 @@ def oz_remapping() -> str | None:
     if vendor is None:
         return None
     return f"@openzeppelin/contracts/={vendor.as_posix()}/"
+
+
+def _parse_remap_line(line: str) -> tuple[str, str] | None:
+    stripped = line.strip()
+    if not stripped or stripped.startswith("#") or "=" not in stripped:
+        return None
+    prefix, target = stripped.split("=", 1)
+    prefix, target = prefix.strip(), target.strip()
+    if not prefix or not target:
+        return None
+    return prefix, target
+
+
+def _abs_remap_target(root: Path, target: str) -> str:
+    raw = target.strip()
+    path = Path(raw)
+    resolved = path.resolve() if path.is_absolute() else (root / raw).resolve()
+    text = resolved.as_posix()
+    if (raw.endswith("/") or resolved.is_dir()) and not text.endswith("/"):
+        text += "/"
+    return text
+
+
+def _dir_remap_target(directory: Path) -> str:
+    text = directory.resolve().as_posix()
+    return text if text.endswith("/") else f"{text}/"
+
+
+def _parse_foundry_remappings(path: Path) -> list[str]:
+    if not path.is_file():
+        return []
+    try:
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return []
+    entries: list[str] = []
+    raw = data.get("remappings")
+    if isinstance(raw, list):
+        entries.extend(str(item) for item in raw)
+    profiles = data.get("profile")
+    if isinstance(profiles, dict):
+        for _name, section in sorted(profiles.items(), key=lambda item: str(item[0])):
+            if isinstance(section, dict) and isinstance(section.get("remappings"), list):
+                entries.extend(str(item) for item in section["remappings"])
+    return entries
+
+
+def _project_remappings(root: Path) -> list[tuple[str, str]]:
+    lines: list[str] = []
+    txt = root / "remappings.txt"
+    if txt.is_file():
+        try:
+            lines.extend(txt.read_text(encoding="utf-8", errors="replace").splitlines())
+        except OSError:
+            pass
+    lines.extend(_parse_foundry_remappings(root / "foundry.toml"))
+    seen: set[str] = set()
+    out: list[tuple[str, str]] = []
+    for line in lines:
+        parsed = _parse_remap_line(line)
+        if parsed is None or parsed[0] in seen:
+            continue
+        prefix, target = parsed
+        seen.add(prefix)
+        out.append((prefix, _abs_remap_target(root, target)))
+    return out
+
+
+def _imported_specs(source: str) -> list[str]:
+    return sorted(set(_IMPORT_RE.findall(source)))
+
+
+def _covers(prefix: str, spec: str) -> bool:
+    if spec.startswith(prefix):
+        return True
+    return not prefix.endswith("/") and (spec == prefix or spec.startswith(f"{prefix}/"))
+
+
+def _any_covers(prefixes: list[str], spec: str) -> bool:
+    return any(_covers(prefix, spec) for prefix in prefixes)
+
+
+def _auto_remap_for_spec(root: Path, spec: str) -> tuple[str, str] | None:
+    if spec.startswith("./") or spec.startswith("../"):
+        return None
+    if spec.startswith("@"):
+        parts = spec.split("/")
+        if len(parts) < 2:
+            return None
+        package = root / "node_modules" / parts[0] / parts[1]
+        if package.is_dir():
+            return f"{parts[0]}/{parts[1]}/", _dir_remap_target(package)
+        return None
+    name = spec.split("/", 1)[0]
+    if not name:
+        return None
+    node_pkg = root / "node_modules" / name
+    if node_pkg.is_dir():
+        return f"{name}/", _dir_remap_target(node_pkg)
+    lib = root / "lib" / name
+    if not lib.is_dir():
+        return None
+    contracts, src = lib / "contracts", lib / "src"
+    if spec.startswith(f"{name}/contracts/") and contracts.is_dir():
+        return f"{name}/contracts/", _dir_remap_target(contracts)
+    if spec.startswith(f"{name}/src/") and src.is_dir():
+        return f"{name}/src/", _dir_remap_target(src)
+    return f"{name}/", _dir_remap_target(lib)
+
+
+def _allow_entries(path: Path) -> list[str]:
+    raw = str(path)
+    resolved = str(path.resolve())
+    return [raw] if raw == resolved else [raw, resolved]
+
+
+def _resolve_compile_paths(root: Path, source: str) -> tuple[list[str], list[str]]:
+    """Project remaps, then imported auto-maps, then the vendored OZ remap; first prefix wins."""
+    pairs = list(_project_remappings(root))
+    prefixes = [prefix for prefix, _target in pairs]
+    for spec in _imported_specs(source):
+        if _any_covers(prefixes, spec):
+            continue
+        auto = _auto_remap_for_spec(root, spec)
+        if auto is None:
+            continue
+        pairs.append(auto)
+        prefixes.append(auto[0])
+    oz = oz_remapping()
+    if oz is not None:
+        prefix, _, target = oz.partition("=")
+        if not _any_covers(prefixes, prefix):
+            pairs.append((prefix, target if target.endswith("/") else f"{target}/"))
+    pairs.sort(key=lambda item: (-len(item[0]), item[0]))
+    remaps = [f"{prefix}={target}" for prefix, target in pairs]
+    allow: list[str] = []
+    seen: set[str] = set()
+    for _prefix, target in pairs:
+        for entry in _allow_entries(Path(target.rstrip("/"))):
+            if entry not in seen:
+                seen.add(entry)
+                allow.append(entry)
+    return remaps, allow
 
 
 # --- retry ladder -----------------------------------------------------------------------------
@@ -283,6 +431,8 @@ def _strip_duplicate_spdx(source: str) -> str:
 
 
 def _apply_fixes(source: str, fixes: set[str]) -> str:
+    if _FIX_BOM in fixes:
+        source = source.removeprefix("\ufeff")
     if _FIX_RELAX in fixes:
         source = _relax_pragmas(source)
     if _FIX_SPDX in fixes:
@@ -313,6 +463,8 @@ def _first_error_line(error: str) -> str:
 
 def _note(fixes: set[str], pragmas: list[str], version: str) -> str:
     parts: list[str] = []
+    if _FIX_BOM in fixes:
+        parts.append("BOM stripped")
     if _FIX_RELAX in fixes:
         distinct = list(dict.fromkeys(pragmas))
         parts.append(f"pragma {' & '.join(distinct)} relaxed")
@@ -324,19 +476,31 @@ def _note(fixes: set[str], pragmas: list[str], version: str) -> str:
     return "; ".join(parts)
 
 
-def _build_slither(target: Path, version: str, allow_root: Path) -> Slither:
+def _build_slither(
+    target: Path,
+    version: str,
+    allow_root: Path,
+    remaps: list[str],
+    extra_allow: list[str],
+) -> Slither:
     solc_bin = solc_binary(version)
     if not solc_bin.is_file():
         raise CompileError(f"solc {version}: binary not found at {solc_bin}")
-    remap = oz_remapping()
+    allow_parts: list[str] = []
+    seen: set[str] = set()
+    for part in (str(allow_root), *extra_allow):
+        if part not in seen:
+            seen.add(part)
+            allow_parts.append(part)
     oz = _oz_dir()
-    allow_parts = [str(allow_root)]
     if oz is not None:
-        allow_parts.append(str(oz.resolve()))
+        oz_s = str(oz.resolve())
+        if oz_s not in seen:
+            allow_parts.append(oz_s)
     return Slither(
         str(target),
         solc=str(solc_bin),
-        solc_remaps=[remap] if remap else [],
+        solc_remaps=remaps,
         solc_args=f"--allow-paths {','.join(allow_parts)}",
     )
 
@@ -344,8 +508,17 @@ def _build_slither(target: Path, version: str, allow_root: Path) -> Slither:
 class _Ladder:
     """Bounded sequence of Slither constructions for one file; records an attempt log."""
 
-    def __init__(self, canonical: Path) -> None:
+    def __init__(
+        self,
+        canonical: Path,
+        allow_root: Path,
+        remaps: list[str],
+        extra_allow: list[str],
+    ) -> None:
         self.canonical = canonical
+        self.allow_root = allow_root
+        self.remaps = remaps
+        self.extra_allow = extra_allow
         self.log: list[str] = []
 
     @property
@@ -355,7 +528,9 @@ class _Ladder:
     def attempt(self, target: Path, version: str) -> Slither | str:
         """Return a Slither on success, else the error text."""
         try:
-            slither = _build_slither(target, version, self.canonical.parent)
+            slither = _build_slither(
+                target, version, self.allow_root, self.remaps, self.extra_allow
+            )
         except CompileError as exc:  # missing binary: recorded, does not spawn solc
             self.log.append(f"{version} on {target.name}: {exc}")
             return str(exc)
@@ -367,8 +542,50 @@ class _Ladder:
         return slither
 
 
-def compile_file_ex(path: Path) -> CompileResult:
+def _climb_ladder(
+    ladder: _Ladder,
+    canonical: Path,
+    source: str,
+    pragmas: list[str],
+    version: str,
+    first_error: str,
+    fixes: set[str],
+    temp: Path | None,
+) -> tuple[CompileResult | None, Path | None]:
+    error = first_error
+    while not ladder.exhausted:
+        new_fixes = _fixes_for(error, has_pragma=bool(pragmas)) - fixes
+        if not new_fixes:
+            break
+        fixes |= new_fixes
+        temp = _temp_copy_path(canonical)
+        try:
+            temp.write_text(_apply_fixes(source, fixes), encoding="utf-8")
+        except OSError as exc:
+            ladder.log.append(f"could not write {temp.name}: {exc}")
+            break
+        outcome = ladder.attempt(temp, version)
+        if isinstance(outcome, Slither):
+            return CompileResult(outcome, version, _note(fixes, pragmas, version), temp, canonical), temp
+        error = outcome
+    if not pragmas:
+        target = temp if temp is not None else canonical
+        for older in NO_PRAGMA_LADDER:
+            if ladder.exhausted:
+                break
+            if older == version:
+                continue
+            outcome = ladder.attempt(target, older)
+            if isinstance(outcome, Slither):
+                return CompileResult(outcome, older, _note(fixes, pragmas, older), target, canonical), temp
+    return None, temp
+
+
+def compile_file_ex(path: Path, *, input_root: Path | None = None) -> CompileResult:
     """Compile `path` with pick_solc's version, then climb the retry ladder on failure.
+
+    `input_root` is the directory given to the CLI (allow-paths + remappings). Tests that call
+    `compile_file(path)` omit it; then allow-paths defaults to the file's parent as before.
 
     Ladder (each rung is a fresh Slither construction; at most MAX_SOLC_ATTEMPTS in total):
       a. error says "requires different compiler version" -> same-directory temp copy with every
@@ -376,53 +593,43 @@ def compile_file_ex(path: Path) -> CompileResult:
       b. no pragma and the default fails -> NO_PRAGMA_LADDER versions in order;
       c. error says "Multiple SPDX license identifiers" -> temp copy with all but the first SPDX
          comment blanked (combined with a. when both apply);
+      BOM. source starts with a UTF-8 BOM -> temp copy with the BOM stripped (same cleanup);
       d. anything else -> CompileError carrying the ORIGINAL first error plus the attempt log.
     Temp copies preserve line numbers and are deleted before returning or raising.
     """
     canonical = Path(path).resolve()
+    allow_root = Path(input_root).resolve() if input_root is not None else canonical.parent
     source = canonical.read_text(encoding="utf-8", errors="replace")
+    remaps, extra_allow = _resolve_compile_paths(allow_root, source)
     pragmas = _pragma_exprs(source)
     version = pick_solc(source)
     if not solc_binary(version).is_file():
         raise CompileError(f"solc {version}: binary not found at {solc_binary(version)}")
 
-    ladder = _Ladder(canonical)
-    outcome = ladder.attempt(canonical, version)
-    if isinstance(outcome, Slither):
-        return CompileResult(outcome, version, None, canonical, canonical)
-    first_error = outcome
-
+    ladder = _Ladder(canonical, allow_root, remaps, extra_allow)
     fixes: set[str] = set()
+    if source.startswith("\ufeff"):
+        fixes.add(_FIX_BOM)
     temp: Path | None = None
-    error = first_error
     try:
-        # Rungs a/c: apply every fix the latest error asks for that is not applied yet.
-        while not ladder.exhausted:
-            new_fixes = _fixes_for(error, has_pragma=bool(pragmas)) - fixes
-            if not new_fixes:
-                break
-            fixes |= new_fixes
+        if _FIX_BOM in fixes:
             temp = _temp_copy_path(canonical)
             try:
                 temp.write_text(_apply_fixes(source, fixes), encoding="utf-8")
             except OSError as exc:
                 ladder.log.append(f"could not write {temp.name}: {exc}")
-                break
-            outcome = ladder.attempt(temp, version)
-            if isinstance(outcome, Slither):
-                return CompileResult(outcome, version, _note(fixes, pragmas, version), temp, canonical)
-            error = outcome
-        # Rung b: no pragma -> older compilers, on the fixed copy if one was needed.
-        if not pragmas:
-            target = temp if temp is not None else canonical
-            for older in NO_PRAGMA_LADDER:
-                if ladder.exhausted:
-                    break
-                if older == version:
-                    continue
-                outcome = ladder.attempt(target, older)
-                if isinstance(outcome, Slither):
-                    return CompileResult(outcome, older, _note(fixes, pragmas, older), target, canonical)
+                temp = None
+        first_target = temp if temp is not None else canonical
+        outcome = ladder.attempt(first_target, version)
+        if isinstance(outcome, Slither):
+            note = _note(fixes, pragmas, version) if fixes else None
+            return CompileResult(outcome, version, note, first_target, canonical)
+        rescued, temp = _climb_ladder(
+            ladder, canonical, source, pragmas, version, outcome, fixes, temp
+        )
+        if rescued is not None:
+            return rescued
+        first_error = outcome
     finally:
         if temp is not None:
             temp.unlink(missing_ok=True)
@@ -431,10 +638,10 @@ def compile_file_ex(path: Path) -> CompileResult:
     )
 
 
-def compile_file(path: Path) -> Slither:
+def compile_file(path: Path, *, input_root: Path | None = None) -> Slither:
     """Thin wrapper for callers that only need the Slither object.
 
     When the ladder rescued the file through a temp copy, filenames inside the returned Slither
     point at `<stem>.__relaxed__.sol`; use compile_file_ex(...).source_path to select contracts.
     """
-    return compile_file_ex(path).slither
+    return compile_file_ex(path, input_root=input_root).slither

@@ -209,7 +209,7 @@ def _constant_cap(fn, ctx: ContractContext) -> bool:
 
 
 def _role_separated_cap(fn, ctx: ContractContext) -> bool:
-    minter_auth = {id(atom.auth_var) for atom in privilege.auth_atoms(fn)}
+    minter_auth = {id(atom.auth_var) for atom in privilege.auth_atoms(fn) if atom.auth_var is not None}
     skip = {id(v) for v in ctx.bindings.balance_vars} | {id(v) for v in ctx.bindings.supply_vars}
     for site in _closure(fn):
         for node in _local_ends(site):

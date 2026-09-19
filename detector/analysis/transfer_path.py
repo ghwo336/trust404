@@ -56,6 +56,7 @@ from detector.analysis._ir import (
 )
 from detector.analysis.balances import Bindings, bind, balance_writes
 from detector.analysis.privilege import is_privileged
+from detector.analysis.roles import privileged_blocking_writable
 
 EndKind = Literal["require", "assert", "if_revert", "if_return_before_write"]
 GateShape = Literal[
@@ -580,7 +581,6 @@ def _state_in_condition(node: Node, function: Function) -> list[StateVariable]:
 
 
 def gate_reads(ctx: Any) -> list[GateRead]:
-    pw = ctx.privileged_writable
     meta = _path_meta(ctx)
     out: list[GateRead] = []
     for end in ctx.end_nodes:
@@ -588,7 +588,7 @@ def gate_reads(ctx: Any) -> list[GateRead]:
         function = node.function
         roles = meta.roles.get(id(function), {})
         for var in _state_in_condition(node, function):
-            if var not in pw:
+            if not privileged_blocking_writable(ctx, var, end):
                 continue
             for shape, key_source in _shape_for(end, var, function, ctx, roles):
                 out.append(GateRead(end, var, shape, key_source))

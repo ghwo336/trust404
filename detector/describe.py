@@ -183,6 +183,9 @@ DISCRIMINATOR_TITLES: dict[str, str] = {
     "no_expiry": "no writer bounds the gate in time",
     "representation_switch": "balance re-denomination",
     "one_shot_initializer": "one-shot initializer",
+    "two_step_handoff": "two-step ownership handoff",
+    "eq_self": "self-call authorisation",
+    "priv_bypass": "privileged sender is exempt from the gate",
     "evidence_only": "evidence only",
 }
 

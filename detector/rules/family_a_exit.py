@@ -213,8 +213,8 @@ def _guard_is_bounded_window(ctx: ContractContext, end) -> bool:
 def _writer_fns(ctx: ContractContext, var) -> list:
     seen: set[int] = set()
     out = []
-    for pw in ctx.privileged_writable.get(var, []):
-        if pw.mode != "function":
+    for pw in ctx.privileged_writes:
+        if pw.var is not var or pw.mode != "function":
             continue
         fn = pw.function
         if id(fn) in seen:
@@ -227,8 +227,8 @@ def _writer_fns(ctx: ContractContext, var) -> list:
 def _writer_nodes(ctx: ContractContext, var) -> list:
     seen: set[tuple[int, int]] = set()
     out = []
-    for pw in ctx.privileged_writable.get(var, []):
-        if pw.mode != "function":
+    for pw in ctx.privileged_writes:
+        if pw.var is not var or pw.mode != "function":
             continue
         key = (id(pw.function), id(pw.node))
         if key in seen:
@@ -263,8 +263,11 @@ def _gate_rules(ctx: ContractContext) -> list[Finding]:
             continue
         seen_pairs.add(pair)
         extra: list[str] = []
+        bypass = privilege.priv_bypass_atom(gate.end_node, gate.var)
+        if bypass is not None:
+            extra.append("priv_bypass")
         if rule_id == "EXIT_GLOBAL_SWITCH":
-            if roles.ungate_exists(ctx, gate.var, gate.end_node):
+            if "priv_bypass" not in extra and roles.ungate_exists(ctx, gate.var, gate.end_node):
                 extra.append("ungate_exists")
         elif rule_id == "EXIT_AMOUNT_LIMIT":
             if _constant_floor(ctx, gate.var):
@@ -282,10 +285,17 @@ def _gate_rules(ctx: ContractContext) -> list[Finding]:
             discs = ("no_expiry",) + tuple(d for d in discs if d != "no_expiry")
         kind = gate.end_node.kind
         impact = gate.end_node.node.function
-        reasoning = (
-            f"{function_name(writers[0]) if writers else '?'} writes {gate.var.name}; "
-            f"impact {function_name(impact)} {kind}"
-        )
+        if bypass is not None:
+            auth_name = bypass.auth_var.name if bypass.auth_var is not None else bypass.kind
+            reasoning = (
+                f"{function_name(writers[0]) if writers else '?'} writes {gate.var.name}; "
+                f"{function_name(impact)} exempt via {auth_name}"
+            )
+        else:
+            reasoning = (
+                f"{function_name(writers[0]) if writers else '?'} writes {gate.var.name}; "
+                f"impact {function_name(impact)} {kind}"
+            )
         for pw in _writer_nodes(ctx, gate.var):
             wdiscs = tuple(extra) + combined_shape_discriminators(ctx, [pw.function])
             if "issuer_token" in discs and "issuer_token" not in wdiscs:
@@ -332,7 +342,10 @@ def PRIV_ROLE(ctx: ContractContext) -> list[Finding]:
         atoms = privilege.auth_atoms(fn)
         if not atoms:
             continue
-        names = ", ".join(f"{atom.auth_var.name} ({atom.kind})" for atom in atoms)
+        names = ", ".join(
+            atom.kind if atom.auth_var is None else f"{atom.auth_var.name} ({atom.kind})"
+            for atom in atoms
+        )
         _append_unique(
             out,
             make_finding(

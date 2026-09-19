@@ -7,10 +7,13 @@ import logging
 import time
 from pathlib import Path
 
+import detector.compile as compile_mod
 from detector.compile import TEMP_COPY_SUFFIX
-from detector.engine import analyze_dir, analyze_file
+from detector.engine import _iter_sol_files, analyze_dir, analyze_file
 from detector.model import FileResult, Finding, validate_output, write_results
 from tests.detector.conftest import HARNESS, REPO_ROOT
+
+VENDOR_OZ = REPO_ROOT / "vendor" / "openzeppelin-contracts"
 
 RELAXABLE_SOURCE = (
     "pragma solidity 0.8.19;\n"
@@ -19,12 +22,12 @@ RELAXABLE_SOURCE = (
 )
 
 
-def _sleeper(path: str, rel: str) -> dict:
+def _sleeper(path: str, rel: str, input_root: str | None = None) -> dict:
     time.sleep(30)
     return {"file": rel, "verdict": "Benign", "findings": []}
 
 
-def _sleeper_leaving_temp_copy(path: str, rel: str) -> dict:
+def _sleeper_leaving_temp_copy(path: str, rel: str, input_root: str | None = None) -> dict:
     """Simulates a worker killed mid-ladder: the temp copy exists when the timeout fires."""
     src = Path(path)
     src.with_name(src.stem + TEMP_COPY_SUFFIX).write_text("pragma solidity >=0.4.0;\n", encoding="utf-8")
@@ -32,7 +35,7 @@ def _sleeper_leaving_temp_copy(path: str, rel: str) -> dict:
     return {"file": rel, "verdict": "Benign", "findings": []}
 
 
-def _raiser(path: str, rel: str) -> dict:
+def _raiser(path: str, rel: str, input_root: str | None = None) -> dict:
     raise RuntimeError("boom")
 
 
@@ -46,7 +49,7 @@ def test_analyze_dir_uses_ladder_temp_path_for_targets(tmp_path, caplog) -> None
     src = tmp_path / "A.sol"
     src.write_text(RELAXABLE_SOURCE, encoding="utf-8")
     with caplog.at_level(logging.INFO, logger="detector.engine"):
-        results = analyze_dir(tmp_path)
+        results, _skipped = analyze_dir(tmp_path)
     assert [r.file for r in results] == ["A.sol"]
     result = results[0]
     assert (result.verdict, result.reason) != ("Uncertain", "compile_failed")
@@ -66,9 +69,9 @@ def test_relaxed_file_matches_plain_compile(tmp_path) -> None:
     (plain_dir / "A.sol").write_text(
         RELAXABLE_SOURCE.replace("pragma solidity 0.8.19;", "pragma solidity 0.8.20;"), encoding="utf-8"
     )
-    relaxed = analyze_dir(relaxed_dir)[0]
-    plain = analyze_dir(plain_dir)[0]
-    assert relaxed == plain
+    relaxed, _ = analyze_dir(relaxed_dir)
+    plain, _ = analyze_dir(plain_dir)
+    assert relaxed[0] == plain[0]
 
 
 def test_analyze_dir_ignores_stray_temp_copy(tmp_path) -> None:
@@ -76,7 +79,7 @@ def test_analyze_dir_ignores_stray_temp_copy(tmp_path) -> None:
     (tmp_path / "X.sol").write_text("pragma solidity 0.8.20; contract X { uint256 x; function f() public { x = 1; } }\n")
     stray = tmp_path / f"X{TEMP_COPY_SUFFIX}"
     stray.write_text("pragma solidity >=0.4.0; contract X {}\n", encoding="utf-8")
-    results = analyze_dir(tmp_path)
+    results, _skipped = analyze_dir(tmp_path)
     assert [r.file for r in results] == ["X.sol"]
     assert results[0].verdict != "Uncertain"
     assert stray.exists()  # skipped, not touched (cleanup only follows a timeout for that file)
@@ -101,6 +104,7 @@ HARNESS_FILES = [
     "oz_ownable_fee_capped/OzFeeCapped.sol",
     "oz_ownable_rug/OzOwnableRug.sol",
     "timelock_self_call/MiniTimelock.sol",
+    "trading_switch_owner_bypass/TradingSwitchBypass.sol",
 ]
 
 # OZ-shaped regression fixtures: verdicts are pinned by their labels.yaml and scored by BAYBENCH,
@@ -115,7 +119,8 @@ OZ_REGRESSION_FILES = (
 
 
 def test_analyze_dir_harness() -> None:
-    results = analyze_dir(HARNESS)
+    results, skipped = analyze_dir(HARNESS)
+    assert skipped == 0
     files = [r.file for r in results]
     assert files == sorted(files)
     assert files == HARNESS_FILES
@@ -190,3 +195,78 @@ def test_write_results_validates_and_round_trips(tmp_path) -> None:
     vendored = (REPO_ROOT / "detector" / "schema" / "result.schema.json").read_bytes()
     bench = (REPO_ROOT / "baybench" / "schema" / "result.schema.json").read_bytes()
     assert vendored == bench
+
+
+def _link(dest: Path, target: Path) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.symlink_to(target)
+
+
+def _sol_count(directory: Path) -> int:
+    return len(_iter_sol_files(directory))
+
+
+def _write_erc20(path: Path, import_line: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "// SPDX-License-Identifier: MIT\n"
+        "pragma solidity 0.8.20;\n"
+        f"{import_line}\n"
+        'contract T is ERC20 { constructor() ERC20("T", "T") {} }\n',
+        encoding="utf-8",
+    )
+
+
+def test_foundry_layout_relative_lib_import(tmp_path) -> None:
+    _link(tmp_path / "lib" / "openzeppelin-contracts" / "contracts", VENDOR_OZ)
+    _write_erc20(
+        tmp_path / "src" / "Token.sol",
+        'import "../lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";',
+    )
+    results, skipped = analyze_dir(tmp_path)
+    assert [r.file for r in results] == ["src/Token.sol"]
+    assert results[0].reason != "compile_failed"
+    assert skipped == _sol_count(tmp_path / "lib")
+    assert skipped > 0
+
+
+def test_hardhat_layout_node_modules_automap(tmp_path, monkeypatch) -> None:
+    _link(tmp_path / "node_modules" / "@openzeppelin" / "contracts", VENDOR_OZ)
+    _write_erc20(
+        tmp_path / "contracts" / "Token.sol",
+        'import "@openzeppelin/contracts/token/ERC20/ERC20.sol";',
+    )
+    monkeypatch.setattr(compile_mod, "_oz_dir", lambda: None)
+    monkeypatch.setenv("DETECTOR_OZ_DIR", "")
+    results, skipped = analyze_dir(tmp_path)
+    assert [r.file for r in results] == ["contracts/Token.sol"]
+    assert results[0].reason != "compile_failed"
+    assert skipped == _sol_count(tmp_path / "node_modules")
+    assert skipped > 0
+
+
+def test_lib_exclusion_negatives(tmp_path) -> None:
+    (tmp_path / "lib").mkdir()
+    (tmp_path / "lib" / "Math.sol").write_text(
+        "pragma solidity 0.8.20; library Math { function add(uint a, uint b) public pure returns (uint) { return a + b; } }\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "lib" / "mylib").mkdir()
+    (tmp_path / "lib" / "mylib" / "Util.sol").write_text(
+        "pragma solidity 0.8.20; library Util { function id(uint x) public pure returns (uint) { return x; } }\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "lib" / "dep" / "src").mkdir(parents=True)
+    (tmp_path / "lib" / "dep" / "src" / "X.sol").write_text(
+        "pragma solidity 0.8.20; contract X {}\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "node_modules" / "x").mkdir(parents=True)
+    (tmp_path / "node_modules" / "x" / "Y.sol").write_text(
+        "pragma solidity 0.8.20; contract Y {}\n",
+        encoding="utf-8",
+    )
+    results, skipped = analyze_dir(tmp_path)
+    assert [r.file for r in results] == ["lib/Math.sol", "lib/mylib/Util.sol"]
+    assert all(r.reason != "compile_failed" for r in results)
+    assert skipped == 2

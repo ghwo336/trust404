@@ -173,7 +173,6 @@ def test_concealment_rules_and_discriminator_sets() -> None:
     assert SHAPE_DISCRIMINATORS == frozenset(
         {
             "managed_role",
-            "library_role",
             "issuer_token",
         }
     )
@@ -278,10 +277,10 @@ def test_downgrade_table_matches_spec() -> None:
         "foreign_only": "INFO",
         "no_custody": "MED",
         "managed_role": "MED",
-        "library_role": "MED",
         "issuer_token": "MED",
         "representation_switch": "DROP",
         "one_shot_initializer": "DROP",
+        "two_step_handoff": "DROP",
     }
 
 
@@ -319,6 +318,19 @@ def test_finalize_concealment_blocks_downgrade() -> None:
         "OWN_HIDDEN_ROLE": "HIGH",
         "EXIT_ADDR_GATE": "HIGH",
     }
+
+
+def test_finalize_two_step_handoff_drops() -> None:
+    finding = _finding(
+        "OWN_FAKE_RENOUNCE",
+        family="D",
+        severity="HIGH",
+        base_severity="HIGH",
+        discriminators=("two_step_handoff",),
+    )
+    adjusted, shape_applied = finalize([finding])
+    assert adjusted == []
+    assert shape_applied is False
 
 
 def test_finalize_drop() -> None:

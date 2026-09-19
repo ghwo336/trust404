@@ -23,7 +23,15 @@ from detector.compile import (
     solc_binary,
 )
 from detector.engine import target_contracts
-from tests.detector.conftest import HARNESS, TIER3
+from tests.detector.conftest import HARNESS, REPO_ROOT, TIER3
+
+VENDOR_OZ = REPO_ROOT / "vendor" / "openzeppelin-contracts"
+_ERC20_VIA_OZ_PREFIX = (
+    "// SPDX-License-Identifier: MIT\n"
+    "pragma solidity 0.8.20;\n"
+    'import "@oz/token/ERC20/ERC20.sol";\n'
+    'contract T is ERC20 { constructor() ERC20("T", "T") {} }\n'
+)
 
 
 @pytest.mark.parametrize(
@@ -342,3 +350,65 @@ def test_target_contracts_are_leaves_only(slither_for) -> None:
         "MiniMeToken",
         "MiniMeTokenFactory",
     ]
+
+
+def _link(dest: Path, target: Path) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.symlink_to(target)
+
+
+def test_remappings_txt_maps_prefix(tmp_path: Path) -> None:
+    _link(tmp_path / "lib" / "oz" / "contracts", VENDOR_OZ)
+    (tmp_path / "remappings.txt").write_text("@oz/=lib/oz/contracts/\n", encoding="utf-8")
+    src = tmp_path / "Token.sol"
+    src.write_text(_ERC20_VIA_OZ_PREFIX, encoding="utf-8")
+    result = compile_file_ex(src, input_root=tmp_path)
+    assert [c.name for c in target_contracts(result.slither, src)] == ["T"]
+
+
+def test_foundry_toml_profile_remappings(tmp_path: Path) -> None:
+    _link(tmp_path / "lib" / "oz" / "contracts", VENDOR_OZ)
+    (tmp_path / "foundry.toml").write_text(
+        '[profile.default]\nremappings = ["@oz/=lib/oz/contracts/"]\n',
+        encoding="utf-8",
+    )
+    src = tmp_path / "Token.sol"
+    src.write_text(_ERC20_VIA_OZ_PREFIX, encoding="utf-8")
+    result = compile_file_ex(src, input_root=tmp_path)
+    assert [c.name for c in target_contracts(result.slither, src)] == ["T"]
+
+
+def test_nested_relative_import_uses_input_root_allow_paths(tmp_path: Path) -> None:
+    (tmp_path / "shared").mkdir()
+    (tmp_path / "shared" / "I.sol").write_text(
+        "pragma solidity 0.8.20;\ninterface I { function ping() external; }\n",
+        encoding="utf-8",
+    )
+    nested = tmp_path / "a" / "b"
+    nested.mkdir(parents=True)
+    src = nested / "C.sol"
+    src.write_text(
+        "pragma solidity 0.8.20;\n"
+        'import "../../shared/I.sol";\n'
+        "contract C { uint256 public x; function f(I) public { x = 1; } }\n",
+        encoding="utf-8",
+    )
+    result = compile_file_ex(src, input_root=tmp_path)
+    assert [c.name for c in target_contracts(result.slither, src)] == ["C"]
+
+
+def test_ladder_strips_utf8_bom(tmp_path: Path) -> None:
+    src = tmp_path / "Bom.sol"
+    src.write_text(
+        "\ufeffpragma solidity 0.8.20;\ncontract Bom { uint256 public x; }\n",
+        encoding="utf-8",
+    )
+    before = _listing(tmp_path)
+    result = compile_file_ex(src)
+    assert isinstance(result, CompileResult)
+    assert result.note is not None
+    assert "BOM" in result.note
+    assert [c.name for c in target_contracts(result.slither, result.source_path)] == ["Bom"]
+    leftover = [name for name in _listing(tmp_path) if TEMP_COPY_SUFFIX in name]
+    assert leftover == []
+    assert _listing(tmp_path) == before

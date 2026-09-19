@@ -394,6 +394,16 @@ def test_meta_falls_back_to_package_constants() -> None:
     assert "Files: 0 · Malicious 0 · Uncertain 0 · Benign 0" in text
 
 
+def test_skipped_dependency_files_header_only_when_positive() -> None:
+    text = render_summary(_sample_results(), {**META, "skipped_dependency_files": 4})
+    assert (
+        "- Skipped 4 dependency file(s) under node_modules/ or lib/<pkg>/ "
+        "(analysed as imports only)."
+    ) in text
+    assert "Skipped" not in render_summary(_sample_results(), META)
+    assert "Skipped" not in render_summary(_sample_results(), {**META, "skipped_dependency_files": 0})
+
+
 # --- describe.py <-> catalog <-> README ------------------------------------------------------
 
 

@@ -617,9 +617,15 @@ def bool_needed_true(node: Node, target: Any) -> bool | None:
             stack.append((ir.rvalue, not want))
             continue
         if isinstance(ir, Binary):
-            if ir.type in (BinaryType.ANDAND, BinaryType.OROR):
-                stack.append((ir.variable_left, want))
-                stack.append((ir.variable_right, want))
+            if ir.type == BinaryType.ANDAND:
+                if want:
+                    stack.append((ir.variable_left, want))
+                    stack.append((ir.variable_right, want))
+                continue
+            if ir.type == BinaryType.OROR:
+                if not want:
+                    stack.append((ir.variable_left, want))
+                    stack.append((ir.variable_right, want))
                 continue
             if ir.type in (BinaryType.EQUAL, BinaryType.NOT_EQUAL):
                 left, right = ir.variable_left, ir.variable_right

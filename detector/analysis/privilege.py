@@ -15,8 +15,10 @@ from slither.slithir.operations import (
     InternalCall,
     LibraryCall,
     Return,
+    Unary,
 )
 from slither.slithir.operations.binary import BinaryType
+from slither.slithir.operations.unary import UnaryType
 from slither.slithir.variables.reference import ReferenceVariable
 
 from detector.analysis._ir import (
@@ -29,6 +31,7 @@ from detector.analysis._ir import (
     bool_needed_true,
     branch_reverts_before_write,
     callee_of,
+    condition_seeds,
     constant_bool,
     contract_cache,
     depends,
@@ -47,6 +50,7 @@ from detector.analysis._ir import (
     is_modifier,
     is_msg_value,
     is_require_assert_node,
+    is_this_expr,
     iter_internal_callees,
     mapping_leaf_type,
     node_sort_key,
@@ -62,7 +66,7 @@ from detector.analysis._ir import (
     var_sort_key,
 )
 
-AuthKind = Literal["eq_state_address", "map_bool", "tx_origin"]
+AuthKind = Literal["eq_state_address", "map_bool", "tx_origin", "eq_self"]
 SenderSource = Literal["msg.sender", "tx.origin"]
 WriteMode = Literal["function", "branch"]
 
@@ -73,7 +77,7 @@ _EQ_TYPES = (BinaryType.EQUAL, BinaryType.NOT_EQUAL)
 class AuthAtom:
     node: Node
     kind: AuthKind
-    auth_var: StateVariable
+    auth_var: StateVariable | None
     sender_source: SenderSource
 
 
@@ -242,11 +246,15 @@ def _atoms_from_call_return(
     node: Node,
     function: Function,
     taint: dict[Variable, str],
+    *,
+    require_needed_true: bool = True,
 ) -> list[AuthAtom]:
     callee = callee_of(ir)
     if callee is None:
         return []
-    if ir.lvalue is None or bool_needed_true(node, ir.lvalue) is not True:
+    if ir.lvalue is None:
+        return []
+    if require_needed_true and bool_needed_true(node, ir.lvalue) is not True:
         return []
     call_taint = _arg_taint_for_callee(ir, function, taint, callee)
     atoms: list[AuthAtom] = []
@@ -336,11 +344,89 @@ def _eq_compare_atoms(
             src = _normalize_sender(_sender_source_of(sender_side, function, taint))
             if src is None:
                 continue
+            if src == "msg.sender" and ir.type == BinaryType.EQUAL and is_this_expr(other, function):
+                atoms.append(AuthAtom(node, "eq_self", None, "msg.sender"))
+                continue
             auth = _state_address_from_value(other, function)
             if auth is None:
                 continue
             atoms.append(AuthAtom(node, _kind_for_compare(src), auth, src))
     return atoms
+
+
+def _or_leaves(var: Any, function: Function) -> list[Any] | None:
+    helper = fn_ir(function)
+    ir = helper.def_of(var)
+    if not isinstance(ir, Binary) or ir.type != BinaryType.OROR:
+        return None
+    out: list[Any] = []
+    for side in (ir.variable_left, ir.variable_right):
+        nested = _or_leaves(side, function)
+        if nested is None:
+            out.append(side)
+        else:
+            out.extend(nested)
+    return out
+
+
+def _leaf_is_var(leaf: Any, var: StateVariable, function: Function) -> bool:
+    helper = fn_ir(function)
+    cur = helper.unwrap(leaf)
+    if leaf is var or cur is var:
+        return True
+    ir = helper.def_of(leaf) or helper.def_of(cur)
+    if isinstance(ir, Unary) and ir.type == UnaryType.BANG:
+        return _leaf_is_var(ir.rvalue, var, function)
+    if isinstance(ir, (InternalCall, LibraryCall)):
+        callee = callee_of(ir)
+        if callee is not None and (
+            var in callee.state_variables_read
+            or any(root_state(rv, callee) is var for rv in (callee.return_values or []))
+        ):
+            return True
+    return root_state(leaf, function) is var or depends(leaf, var, function)
+
+
+def _leaf_auth_atom(leaf: Any, node: Node, function: Function) -> AuthAtom | None:
+    helper = fn_ir(function)
+    ir = helper.def_of(leaf)
+    if isinstance(ir, Unary) and ir.type == UnaryType.BANG:
+        return _leaf_auth_atom(ir.rvalue, node, function)
+    if isinstance(ir, Binary) and ir.type in _EQ_TYPES:
+        found = _eq_compare_atoms([ir], node, function, {})
+        return found[0] if found else None
+    if isinstance(ir, Index) and ir.lvalue is not None:
+        mapped = _map_bool_root(ir.lvalue, function, {})
+        if mapped is None:
+            return None
+        root, src = mapped
+        kind: AuthKind = "tx_origin" if src == "tx.origin" else "map_bool"
+        return AuthAtom(node, kind, root, src)
+    if isinstance(ir, (InternalCall, LibraryCall)):
+        atoms = _atoms_from_call_return(ir, node, function, {}, require_needed_true=False)
+        return atoms[0] if atoms else None
+    return None
+
+
+def priv_bypass_atom(end_node: Any, var: StateVariable) -> AuthAtom | None:
+    """Auth atom OR'd with `var` on an end-node condition (`state_gate || auth`)."""
+    node = end_node.node
+    function = node.function
+    if function is None:
+        return None
+    for seed in condition_seeds(node):
+        leaves = _or_leaves(seed, function)
+        if not leaves or len(leaves) < 2:
+            continue
+        if not any(_leaf_is_var(leaf, var, function) for leaf in leaves):
+            continue
+        for leaf in leaves:
+            if _leaf_is_var(leaf, var, function):
+                continue
+            atom = _leaf_auth_atom(leaf, node, function)
+            if atom is not None:
+                return atom
+    return None
 
 
 def _returns_true_literal(nodes: set[Node]) -> bool:
@@ -528,9 +614,10 @@ def _auth_vars_of(function: Function) -> tuple[StateVariable, ...]:
     seen: list[StateVariable] = []
     ids: set[int] = set()
     for atom in atoms:
-        if id(atom.auth_var) not in ids:
-            ids.add(id(atom.auth_var))
-            seen.append(atom.auth_var)
+        if atom.auth_var is None or id(atom.auth_var) in ids:
+            continue
+        ids.add(id(atom.auth_var))
+        seen.append(atom.auth_var)
     return tuple(seen)
 
 
@@ -652,9 +739,11 @@ def auth_vars(contract: Any) -> set[StateVariable]:
         if is_ctor(fn):
             continue
         for atom in auth_atoms(fn):
-            found.add(atom.auth_var)
+            if atom.auth_var is not None:
+                found.add(atom.auth_var)
         for atom, _ in branch_atoms(fn):
-            found.add(atom.auth_var)
+            if atom.auth_var is not None:
+                found.add(atom.auth_var)
     return found
 
 

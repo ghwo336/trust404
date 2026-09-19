@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import yaml
 
+from detector.analysis.context import ContractContext
+from detector.compile import compile_file
 from detector.engine import target_contracts
 from detector.rules.family_e_struct import (
     RULES,
@@ -13,10 +15,30 @@ from detector.rules.family_e_struct import (
     struct_selfdestruct,
 )
 from tests.detector.analysis_util import make_ctx, tier1_ctx
-from tests.detector.conftest import TIER1, TIER3
+from tests.detector.conftest import CASES, TIER1, TIER3
+
+# Captured from current Family E output on STRUCT_PROXY_EOA_ADMIN (git stash
+# comparison against this branch, 2026-09-20): only the proxy-admin rule at MED
+# on mal; ben silent; STRUCT_DELEGATECALL_SETTABLE does not fire on either twin.
+_PROXY_EOA_ADMIN_BASELINE = {
+    "mal": {("STRUCT_PROXY_EOA_ADMIN", "MED")},
+    "ben": set(),
+}
+
+_UNPRIVILEGED_PARAM_DELEGATECALL = """\
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.20;
+
+contract OpenDelegate {
+    function run(address target, bytes calldata data) external {
+        (bool ok,) = target.delegatecall(data);
+        require(ok);
+    }
+}
+"""
 
 _DOWNGRADE = frozenset(
-    {"foreign_only", "no_custody", "issuer_token", "managed_role", "library_role"}
+    {"foreign_only", "no_custody", "issuer_token", "managed_role"}
 )
 
 _TIER3 = (
@@ -121,6 +143,48 @@ def test_struct_delegatecall_settable_ben_silent(slither_for) -> None:
 def test_struct_delegatecall_skips_proxy_fallback(slither_for) -> None:
     ctx = tier1_ctx(slither_for, "STRUCT_PROXY_EOA_ADMIN", "mal")
     assert struct_delegatecall_settable(ctx) == []
+
+
+def test_struct_delegatecall_settable_p5_param_target_fires_high(slither_for) -> None:
+    path = (
+        CASES
+        / "tier0_judge"
+        / "P5_DelegatecallBackdoor_sol"
+        / "P5_DelegatecallBackdoor_sol.sol"
+    )
+    ctx = make_ctx(slither_for, path)
+    findings = struct_delegatecall_settable(ctx)
+    matched = [
+        f
+        for f in findings
+        if f.rule_id == "STRUCT_DELEGATECALL_SETTABLE"
+        and f.severity == "HIGH"
+        and f.function == "execute"
+        and 37 in f.lines
+    ]
+    assert matched, [(f.function, f.severity, f.lines, f.reasoning) for f in findings]
+    reasoning = matched[0].reasoning
+    assert "execute" in reasoning
+    assert "parameter" in reasoning.lower()
+    assert "privileged" in reasoning.lower()
+
+
+def test_struct_delegatecall_settable_unprivileged_param_silent(tmp_path) -> None:
+    src = tmp_path / "OpenDelegate.sol"
+    src.write_text(_UNPRIVILEGED_PARAM_DELEGATECALL, encoding="utf-8")
+    slither = compile_file(src)
+    contracts = target_contracts(slither, src)
+    assert contracts
+    ctx = ContractContext(slither=slither, contract=contracts[0], input_root=src.parent)
+    findings = struct_delegatecall_settable(ctx)
+    assert findings == [], [(f.function, f.severity, f.reasoning) for f in findings]
+
+
+def test_struct_proxy_eoa_admin_outputs_unchanged(slither_for) -> None:
+    for twin, expected in _PROXY_EOA_ADMIN_BASELINE.items():
+        ctx = tier1_ctx(slither_for, "STRUCT_PROXY_EOA_ADMIN", twin)
+        got = {(item.rule_id, item.severity) for rule in RULES for item in rule(ctx)}
+        assert got == expected, (twin, got, expected)
 
 
 def test_struct_selfdestruct_mal_fires_high(slither_for) -> None:

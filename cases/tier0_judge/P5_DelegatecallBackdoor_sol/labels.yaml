@@ -2,5 +2,8 @@ id: tier0/P5_DelegatecallBackdoor_sol
 file: P5_DelegatecallBackdoor_sol.sol
 solc: 0.8.24
 preferred_verdict: Malicious
-accepted_verdicts:
-- Malicious
+accepted_verdicts: [Malicious]
+expected_families: [E]
+expected_rule_ids: [STRUCT_DELEGATECALL_SETTABLE]
+expected_functions: [execute]
+source: "organizers' public sample P5: privileged execute delegatecalls a caller-supplied target and data"
