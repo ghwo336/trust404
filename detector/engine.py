@@ -156,7 +156,7 @@ def _analyze_in_process(path: str, rel: str, input_root: str | None = None) -> d
         verdict=verdict,
         reason=reason,
         findings=tuple(findings),
-    ).to_json()
+    ).to_json(internal=True)
     if compiled.note:
         payload["compile_note"] = compiled.note
     return payload
@@ -183,6 +183,8 @@ def _file_result_from_worker(obj: dict) -> FileResult:
             function=item.get("function") or "",
             lines=tuple(item.get("lines") or ()),
             reasoning=item.get("reasoning") or "",
+            base_severity=item.get("base_severity") or item["severity"],
+            discriminators=tuple(item.get("discriminators") or ()),
         )
         for item in (obj.get("findings") or ())
     )

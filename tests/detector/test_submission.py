@@ -10,7 +10,14 @@ import sys
 from pathlib import Path
 
 from detector import docker_entry
-from detector.describe import REASON_SENTENCES, discriminator_title, rule_explanation, rule_title
+from detector.describe import (
+    REASON_SENTENCES,
+    bounding_notes,
+    governance_notes,
+    rule_explanation,
+    rule_title,
+)
+from detector.engine import analyze_file
 from detector.model import FileResult, Finding
 from detector.submission import (
     list_top_level_sol,
@@ -171,8 +178,11 @@ def test_to_judge_object_benign_info_only_with_discriminators(tmp_path: Path) ->
     assert obj["verdict"] == "BENIGN"
     assert obj["reasons"][0] == BENIGN_BOUNDED
     assert any("owner mint bounded by cap" in row for row in obj["reasons"][1:])
-    assert f"(bounded: {discriminator_title('constant_cap')})" in obj["reasons"][1]
-    assert f"(governance: {discriminator_title('managed_role')})" in obj["reasons"][1]
+    mint_row = next(row for row in obj["reasons"] if "owner mint bounded by cap" in row)
+    for note in bounding_notes(result.findings[0]):
+        assert f"(bounded: {note})" in mint_row
+    for note in governance_notes(result.findings[0]):
+        assert f"(governance: {note})" in mint_row
     assert obj["risk_level"] == "LOW"
     assert obj["risk_type"] == "CENTRALIZATION"
     assert obj["confidence"] == 0.7
@@ -310,6 +320,10 @@ def test_cli_submission_tier0_stdout_is_schema_valid(tmp_path: Path) -> None:
             assert "line" in ev
             assert 1 <= ev["line"] <= n_lines
     assert proc.stderr.strip()
+    p4 = next(item for item in payload if item["file"] == "P4_CappedMint_sol.sol")
+    mint_reasons = [row for row in p4["reasons"] if row.startswith(rule_title("BAL_PRIV_MINT"))]
+    assert mint_reasons, p4["reasons"]
+    assert any("(bounded:" in row for row in mint_reasons), mint_reasons
 
 
 def test_cli_submission_stdout_stays_json_when_workers_log(tmp_path: Path) -> None:
@@ -382,3 +396,16 @@ def test_docker_entry_submission_argv(monkeypatch) -> None:
     )
     assert docker_entry.main(["--budget", "60"]) == 0
     assert seen == [["/input", "--budget", "60"]]
+
+
+def test_usdc_exit_addr_gate_carries_governance_note() -> None:
+    path = (
+        REPO_ROOT / "cases" / "tier3_benign_risky" / "usdc_fiattoken" / "FiatTokenV1.sol"
+    )
+    result = analyze_file(path, path.name, input_root=path.parent)
+    obj = to_judge_object(result, path)
+    validate_against_schema([obj])
+    assert obj["verdict"] == "MALICIOUS"
+    gate = [row for row in obj["reasons"] if row.startswith(rule_title("EXIT_ADDR_GATE"))]
+    assert gate, obj["reasons"]
+    assert any("(governance:" in row for row in gate), gate

@@ -9,7 +9,9 @@ from pathlib import Path
 
 import detector.compile as compile_mod
 from detector.compile import TEMP_COPY_SUFFIX
-from detector.engine import _iter_sol_files, analyze_dir, analyze_file
+from jsonschema.validators import Draft202012Validator
+
+from detector.engine import _file_result_from_worker, _iter_sol_files, analyze_dir, analyze_file
 from detector.model import FileResult, Finding, validate_output, write_results
 from tests.detector.conftest import HARNESS, REPO_ROOT
 
@@ -195,6 +197,37 @@ def test_write_results_validates_and_round_trips(tmp_path) -> None:
     vendored = (REPO_ROOT / "detector" / "schema" / "result.schema.json").read_bytes()
     bench = (REPO_ROOT / "baybench" / "schema" / "result.schema.json").read_bytes()
     assert vendored == bench
+
+
+def test_internal_finding_payload_round_trips_discriminators(tmp_path) -> None:
+    finding = Finding(
+        rule_id="BAL_PRIV_MINT",
+        family="B",
+        severity="INFO",
+        contract="Token",
+        function="mint",
+        lines=(10,),
+        reasoning="capped mint",
+        base_severity="HIGH",
+        discriminators=("constant_cap", "managed_role"),
+    )
+    public = finding.to_json()
+    assert "base_severity" not in public
+    assert "discriminators" not in public
+
+    payload = FileResult("x.sol", "Benign", findings=(finding,)).to_json(internal=True)
+    restored = _file_result_from_worker(payload)
+    assert restored.findings[0] == finding
+
+    out = tmp_path / "results.json"
+    obj = write_results(out, [FileResult("x.sol", "Benign", findings=(finding,))])
+    schema = json.loads(
+        (REPO_ROOT / "detector" / "schema" / "result.schema.json").read_text(encoding="utf-8")
+    )
+    Draft202012Validator(schema).validate(obj)
+    dumped = obj["results"][0]["findings"][0]
+    assert "base_severity" not in dumped
+    assert "discriminators" not in dumped
 
 
 def _link(dest: Path, target: Path) -> None:

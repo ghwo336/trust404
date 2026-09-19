@@ -50,8 +50,8 @@ table — one row per file, Malicious first — whose `why` column is a plain se
 the verdict, its reason code and the findings. Each file then gets a section with its findings
 grouped HIGH → MED → INFO in tables of `rule | title | where | lines | evidence`; `where` is
 `Contract.function`, `lines` are compressed ranges, and `evidence` is the structural reason
-plus, when the policy moved a finding away from its catalog severity, a note such as
-`downgraded HIGH→MED: role is granted only by a different role`. More than six role-gated
+plus, when a bounding discriminator moved a finding to INFO, a note such as
+`downgraded HIGH→INFO: supply is capped by a constant`. More than six role-gated
 functions are collapsed into one line with a `<details>` block.
 
 ## Submission mode (how the judges run it)
@@ -115,56 +115,62 @@ Each array element is one input basename:
 
 ## How a verdict is derived
 
+Decisive mode (Phase 5). Grading is +1 correct / 0 `UNCERTAIN` / −1 wrong, so a finding set
+we fully understand must resolve to **Malicious** or **Benign**. `UNCERTAIN` is an abstain,
+not a hedge.
+
 1. **Findings.** Every rule in the table below is a structural predicate over Slither IR. A
    finding records the contract, the function that carries the evidence, its source lines and
    a reasoning sentence. Identifiers appear in the reasoning for reporting only.
-2. **Severities.** Each rule has a catalog base severity: HIGH, MED or INFO.
-3. **Discriminators.** Shapes that distinguish disclosed, institutional centralisation from a
-   trapdoor can downgrade a HIGH finding to MED (or, for capped fees and foreign-token rescues,
-   to INFO): a role that is granted only by a *different* role (USDC's owner → blacklister →
-   blacklist), authority that comes from a vendored library (OpenZeppelin `Ownable`,
-   `AccessControl`), an issuer-token shape (mint and burn-other both emit events), a constant
-   floor or cap, a time-bounded launch window, a privileged un-gate for a pause switch.
-   Concealment rules — `OWN_HIDDEN_ROLE`, `OWN_FAKE_RENOUNCE`, `VIEW_CALLER_DEPENDENT`,
-   `BAL_TRANSFER_HIDDEN_MINT`, `LEAK_EXEMPT_PATH`, `EXIT_CALLBACK_CYCLE` — are never
-   downgraded, and when one of them fires at HIGH no other finding in that contract is
-   downgraded either: a disclosed pause switch cannot launder a hidden owner.
-4. **Verdict.**
-   - any HIGH finding → **Malicious** (`reason` empty);
-   - else a transfer path that calls a contract at a settable address → **Uncertain**
-     (`external_dependency`): the behaviour cannot be read from this source;
-   - else two MED findings from different rule families that both still count (native MED
-     rules, not bound- or shape-downgraded ones) → **Malicious** (`escalated:<ids>`), unless a
-     benign institutional shape (managed role, library role, issuer token) is present in the
-     contract;
-   - else any MED → **Uncertain** (`med_findings`);
-   - else a Slither exploit-shape check (`arbitrary-send-eth`, `reentrancy-eth`, `suicidal`,
-     `controlled-delegatecall`, …) → **Uncertain** (`slither_high`); other Slither High
-     results are INFO evidence only;
-   - else **Benign**.
-   Compile failure, per-file timeout and internal errors yield **Uncertain** with
-   `compile_failed`, `timeout` or `analysis_error`.
+2. **Severities.** Each rule has a catalog base severity: HIGH, MED or INFO. Policy then
+   sets `severity ∈ {HIGH, INFO}` for the verdict and keeps `base_severity` plus the matched
+   discriminator names for reporting.
+3. **Bounding discriminators** (the power is limited by code or is not a user-asset path →
+   INFO, evidence only): `constant_cap`, `fee_cap`, `constant_floor`, `bounded_window`,
+   `ungate_exists` (only when there is no `priv_bypass`), `no_custody`, `foreign_only`,
+   `two_step_handoff`, `one_shot_initializer`, `representation_switch`. `priv_bypass`
+   (owner-exempt gate) cancels `ungate_exists` / `constant_floor` / `bounded_window`: an
+   asymmetric restriction is the organizers' rule-1 MALICIOUS.
+4. **Governance discriminators** (who holds the power, not how much → recorded, **no
+   downgrade**): `managed_role`, `issuer_token`, `role_separated_cap`. They annotate the
+   reason text and can set `risk_type: CENTRALIZATION` on a BENIGN report; they never change
+   the verdict. Provenance (`library_role`) is not a signal.
+5. **Counting finding.** A finding whose rule is HIGH-base, **or** one of the decisive MED
+   rules {`HONEYPOT_LEGACY`, `PONZI_SHAPE`, `STRUCT_PROXY_EOA_ADMIN`, `OWN_TX_ORIGIN`,
+   `EXIT_TIME_GATE` only with `no_expiry`}, **or** a `SLITHER_HIGH_OVERLAY` exploit-shape
+   check (`reentrancy-eth`, `arbitrary-send-eth`, `arbitrary-send-erc20`,
+   `arbitrary-send-erc20-permit`, `suicidal`, `controlled-delegatecall`,
+   `unprotected-upgrade`), **and** no bounding discriminator applies to it.
+6. **Verdict.**
+   - any counting finding → **Malicious** (`reason` empty; the HIGH rule ids are the reason);
+   - else `STRUCT_EXTERNAL_GATE` present → **Uncertain** (`external_dependency`): behaviour
+     lives in code we cannot see (the one analytic abstain);
+   - else **Benign**. INFO findings (bounded controls, `PRIV_ROLE`, non-exploit Slither
+     checks with `evidence_only`, `FEE_ADDR_MUTABLE`) stay on the report as evidence.
+   Engine / submission abstains: `compile_failed`, `timeout`, `analysis_error`, and
+   `budget_exhausted` in submission mode.
 
-In one sentence each: **Malicious** is a concealed control, an unbounded privilege over exits
-or balances under an unmanaged role, or two independent native privileged controls from
-different families. **Uncertain** is privilege that is bounded, disclosed, institutionally
-structured, or depends on an external contract — a real third answer that asks for manual
-review, not a hedge. **Benign** is nothing privileged touching exits, balances or funds.
+In one sentence each: **Malicious** is an unbounded privileged path to user assets, an
+asymmetric exit restriction, a concealment / escape hatch, or an exploit-shaped Slither
+check. **Benign** is nothing privileged touching exits, balances or funds — or every such
+control is bounded in code. **Uncertain** is only used when we could not finish the analysis
+or the transfer path calls a settable external contract.
 
 ### Worked example
 
-- USDC `FiatTokenV1`: `blacklist()` gates `_transfer`, `pause()` halts it, `mint()` creates
-  supply. Each would be HIGH in isolation, but the blacklister is appointed by the owner, the
-  pauser by the owner, minters by the master minter — every writer is a *managed role*, so all
-  three drop to MED and the shape suppresses escalation. Verdict **Uncertain**
-  (`med_findings`), never Malicious. The summary lists the twelve role-gated functions and the
-  five distinct authority variables so a reviewer can confirm the structure in seconds.
+- USDC `FiatTokenV1` (`cases/tier3_benign_risky/usdc_fiattoken`): `blacklist()` gates
+  `_transfer` and `mint()` is bounded only by a `minterAllowed` the master minter can raise.
+  Those writers are *managed roles*, but governance is not a code bound — the notes appear
+  in `reasons` as `(governance: …)` and the findings stay HIGH. Verdict **Malicious**.
+- `P4_CappedMint` (`cases/tier0_judge/P4_CappedMint_sol`): `onlyOwner mint` increases
+  supply, but every writer is bounded by a constant/immutable cap (`constant_cap`).
+  `BAL_PRIV_MINT` is INFO; the reason line carries `(bounded: cap is a constant/immutable)`.
+  Verdict **Benign**.
 - A token whose `owner` can flip `blacklist[account]` and whose `_transfer` reverts on that
-  map: the same gate shape, but the writer is gated by the very role it belongs to. No
-  discriminator applies, `EXIT_ADDR_GATE` stays HIGH, verdict **Malicious**.
+  map, with no cap and no other role: `EXIT_ADDR_GATE` stays HIGH, verdict **Malicious**.
 - A contract with a `private _dev` address compared against `msg.sender` in a modifier and no
-  view exposing it: `OWN_HIDDEN_ROLE` at HIGH (concealment), verdict **Malicious** even when
-  `owner` is public and renounced.
+  view exposing it: `OWN_HIDDEN_ROLE` at HIGH, verdict **Malicious** even when `owner` is
+  public and renounced.
 
 ## What it detects
 
@@ -188,7 +194,7 @@ Twenty-nine rules in seven families; base severity from `baybench/catalog.yaml`,
 
 | rule | title | base | what fired |
 | --- | --- | --- | --- |
-| `BAL_PRIV_MINT` | Privileged mint | HIGH | A privileged function increases a balance or `totalSupply` outside the constructor; MED under a constant cap, a cap set by a separate role, an issuer-token or a managed role. |
+| `BAL_PRIV_MINT` | Privileged mint | HIGH | A privileged function increases a balance or `totalSupply` outside the constructor; INFO under a bounding discriminator (`constant_cap`); governance notes (`managed_role`, `issuer_token`, `role_separated_cap`) stay HIGH and only annotate the reason. |
 | `BAL_PRIV_BURN_OTHER` | Privileged burn of another account | HIGH | A privileged function decreases the balance of an account other than the caller. |
 | `BAL_DIRECT_SET` | Privileged direct balance write | HIGH | A privileged function assigns an arbitrary value to a balance entry (reflection-token re-denominations are recognised and dropped). |
 | `BAL_TRANSFER_HIDDEN_MINT` | Hidden mint inside transfer | HIGH | On the transfer path more is credited than debited, typically to a recipient other than the stated one. |
@@ -198,11 +204,11 @@ Twenty-nine rules in seven families; base severity from `baybench/catalog.yaml`,
 
 | rule | title | base | what fired |
 | --- | --- | --- | --- |
-| `FEE_ADDR_MUTABLE` | Settable fee recipient | MED | The recipient of a fee or tax credited on the transfer path is a privileged-writable address. |
+| `FEE_ADDR_MUTABLE` | Settable fee recipient | MED | The recipient of a fee or tax credited on the transfer path is a privileged-writable address; INFO always (the amount is `FEE_UNBOUNDED`'s job). |
 | `LEAK_ARBITRARY_TRANSFERFROM` | Privileged transfer from any account without allowance | HIGH | A privileged path debits an arbitrary account without reading its allowance. |
 | `LEAK_EXEMPT_PATH` | Privileged transfer path skipping the sender debit | HIGH | A branch on the transfer path taken for a privileged sender credits the recipient while skipping the sender debit. |
-| `LEAK_PRIV_SWEEP` | Privileged sweep of custodied funds | HIGH | A privileged function sends the contract's whole ETH balance or its own tokens out; rescue of foreign tokens only is INFO, an ETH sweep from a contract that takes no user deposits is MED. |
-| `SLITHER_HIGH_OVERLAY` | Slither high-impact check | INFO | One of Slither's built-in High-impact detectors fired; exploit-shape checks lift Benign to Uncertain, all others are evidence only. |
+| `LEAK_PRIV_SWEEP` | Privileged sweep of custodied funds | HIGH | A privileged function sends the contract's whole ETH balance or its own tokens out; `foreign_only` / `no_custody` bound it to INFO. |
+| `SLITHER_HIGH_OVERLAY` | Slither high-impact check | INFO | One of Slither's built-in High-impact detectors fired; exploit-shape checks count as HIGH (MALICIOUS), all others are evidence only. |
 
 #### Family D — Control-plane deception
 
@@ -211,29 +217,29 @@ Twenty-nine rules in seven families; base severity from `baybench/catalog.yaml`,
 | `OWN_HIDDEN_ROLE` | Undisclosed privileged role | HIGH | An address or map that gates privileged functions is not readable through any public variable or view: a second owner that explorers cannot show. |
 | `OWN_FAKE_RENOUNCE` | Renouncement that keeps a privileged role alive | HIGH | A function clears one authority variable while another authority that still gates privileged functions survives, or the renounce writes a new non-zero authority. |
 | `OWN_REASSIGN_NONSTD` | Non-standard reassignment of a privileged role | HIGH | An authority variable is written outside the constructor by a function that is not gated by that authority, or set to a literal address or `msg.sender`; one-shot initializers are exempt. |
-| `OWN_TX_ORIGIN` | tx.origin-based authorisation | MED | Authorisation compares `tx.origin` instead of `msg.sender`. |
+| `OWN_TX_ORIGIN` | tx.origin-based authorisation | MED | Authorisation compares `tx.origin` instead of `msg.sender`; a decisive MED rule (counts as MALICIOUS). |
 
 #### Family E — Structural escape hatches
 
 | rule | title | base | what fired |
 | --- | --- | --- | --- |
-| `STRUCT_EXTERNAL_GATE` | Transfer logic delegated to a settable external contract | MED | The transfer path calls a contract at a privileged-writable address, so its behaviour cannot be determined from this source alone; verdict `Uncertain(external_dependency)`. |
+| `STRUCT_EXTERNAL_GATE` | Transfer logic delegated to a settable external contract | MED | The transfer path calls a contract at a privileged-writable address; the one analytic abstain — verdict `Uncertain(external_dependency)` unless a counting finding is also present. |
 | `STRUCT_DELEGATECALL_SETTABLE` | delegatecall to a settable address | HIGH | A `delegatecall` targets a privileged-writable address outside the standard proxy fallback shape: the role can replace the contract's code. |
 | `STRUCT_SELFDESTRUCT` | Reachable selfdestruct | HIGH | `selfdestruct` is reachable from a public or external function. |
-| `STRUCT_PROXY_EOA_ADMIN` | Upgradeable proxy with a single-key admin | MED | A proxy fallback delegates to an implementation address whose writer is gated by a single stored address. |
+| `STRUCT_PROXY_EOA_ADMIN` | Upgradeable proxy with a single-key admin | MED | A proxy fallback delegates to an implementation address whose writer is gated by a single stored address; a decisive MED rule (counts as MALICIOUS). |
 
 #### Family F — Approval drainers and honeypots
 
 | rule | title | base | what fired |
 | --- | --- | --- | --- |
 | `DRAIN_APPROVAL_PULL` | Approval drainer pulling caller funds to a third party | HIGH | A non-privileged function pulls tokens from the caller via `transferFrom` or `permit` to an address that is not the caller, with nothing credited back. |
-| `HONEYPOT_LEGACY` | Legacy honeypot exit condition | MED | A deposit is accepted but the ETH exit depends on a constructor-set or privileged-set secret, or on a balance comparison that cannot hold. |
+| `HONEYPOT_LEGACY` | Legacy honeypot exit condition | MED | A deposit is accepted but the ETH exit depends on a constructor-set or privileged-set secret, or on a balance comparison that cannot hold; a decisive MED rule (counts as MALICIOUS). |
 
 #### Family G — Ponzi schemes
 
 | rule | title | base | what fired |
 | --- | --- | --- | --- |
-| `PONZI_SHAPE` | Ponzi payout shape | MED | ETH is paid to addresses stored by earlier payable calls and the contract has no value source other than `msg.value`. |
+| `PONZI_SHAPE` | Ponzi payout shape | MED | ETH is paid to addresses stored by earlier payable calls and the contract has no value source other than `msg.value`; a decisive MED rule (counts as MALICIOUS). |
 
 ## Design guarantees
 
@@ -258,9 +264,9 @@ Twenty-nine rules in seven families; base severity from `baybench/catalog.yaml`,
 
 Measured with BAYBENCH (`bench run detector`): Tier 1 hand-written malicious/benign twins per
 rule id, Tier 2 real-world rug pulls and honeypots from the Pied-Piper, CRPWarner and
-HoneyBadger corpora, Tier 3 real contracts that look risky but are legitimate (USDC, Bancor
-SmartToken, Lido LDO MiniMe, OpenZeppelin Pausable/Capped/Permit wrappers, a reflection token,
-a foreign-token rescue), and Tier 0 judge samples when available.
+HoneyBadger corpora, Tier 3 contracts that look privileged (the five bounded OpenZeppelin /
+reflection / rescue fixtures must stay Benign; USDC FiatToken, Bancor SmartToken and Lido
+LDO MiniMe are preferred Malicious under decisive mode), and Tier 0 judge samples.
 
 <!-- BENCH NUMBERS: filled by orchestrator -->
 
@@ -286,9 +292,10 @@ a foreign-token rescue), and Tier 0 judge samples when available.
 - **Bounded interprocedural depth.** Transfer-path closure follows modifiers and internal or
   library calls inside the compilation unit; behaviour behind an external call is, by design,
   `Uncertain(external_dependency)` rather than guessed.
-- **Uncertain is a real third answer.** Disclosed, bounded or externally dependent privilege is
-  reported as Uncertain with a reason code and evidence; it is not a low-confidence Malicious
-  and not a Benign with a footnote.
+- **Uncertain is a real third answer.** It is used only when analysis could not finish
+  (`compile_failed`, `timeout`, `analysis_error`, `budget_exhausted`) or the transfer path
+  calls a settable external contract (`external_dependency`). Bounded privilege is Benign;
+  disclosed-but-unbounded governance is Malicious with a governance note.
 - **Static only.** No simulation or fork; behaviour that depends on runtime state (an
   implementation address, an oracle) is reported structurally, not exercised.
 
@@ -306,4 +313,4 @@ a foreign-token rescue), and Tier 0 judge samples when available.
 | `analysis/` | shared predicates: privilege (auth atoms), transfer path, balance binding, role shapes, ETH flows |
 | `rules/` | one callable per rule id, grouped by family; `overlay.py` wraps Slither's High-impact detectors |
 | `schema/result.schema.json` | vendored copy of the Track 1 result schema |
-| `Dockerfile` | `python:3.11-slim` + Slither + pinned `solc` set + vendored OpenZeppelin; entrypoint `/input → /output/results.json` |
+| `Dockerfile` | `python:3.11-slim` + Slither + pinned `solc` set + vendored OpenZeppelin; entrypoint `python -m detector.docker_entry` |

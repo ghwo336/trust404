@@ -11,7 +11,13 @@ from pathlib import Path
 from jsonschema.validators import Draft202012Validator
 
 from detector.compile import is_temp_copy
-from detector.describe import REASON_SENTENCES, discriminator_title, rule_explanation, rule_title
+from detector.describe import (
+    REASON_SENTENCES,
+    bounding_notes,
+    governance_notes,
+    rule_explanation,
+    rule_title,
+)
 from detector.engine import analyze_file, is_dependency_target
 from detector.model import FileResult, Finding
 
@@ -20,24 +26,6 @@ logger = logging.getLogger("detector.submission")
 DEFAULT_BUDGET_S = 480.0
 _SCHEMA_PATH = Path(__file__).resolve().parent / "schema" / "judge.schema.json"
 
-_BOUNDED_DISCRIMINATORS = frozenset(
-    {
-        "constant_cap",
-        "fee_cap",
-        "constant_floor",
-        "bounded_window",
-        "ungate_exists",
-        "no_custody",
-        "foreign_only",
-    }
-)
-_GOVERNANCE_DISCRIMINATORS = frozenset(
-    {
-        "managed_role",
-        "issuer_token",
-        "role_separated_cap",
-    }
-)
 _BACKDOOR_RULES = frozenset(
     {
         "OWN_HIDDEN_ROLE",
@@ -222,16 +210,12 @@ def _reason_sentence(reason: str) -> str:
     return sentence
 
 
-def _discriminator_notes(names: tuple[str, ...]) -> str:
+def _discriminator_notes(finding: Finding) -> str:
     parts: list[str] = []
-    for name in names:
-        title = discriminator_title(name)
-        if name in _BOUNDED_DISCRIMINATORS:
-            parts.append(f"(bounded: {title})")
-        elif name in _GOVERNANCE_DISCRIMINATORS:
-            parts.append(f"(governance: {title})")
-        else:
-            parts.append(f"({title})")
+    for note in bounding_notes(finding):
+        parts.append(f"(bounded: {note})")
+    for note in governance_notes(finding):
+        parts.append(f"(governance: {note})")
     if not parts:
         return ""
     return " " + " ".join(parts)
@@ -242,7 +226,7 @@ def _finding_reason_text(finding: Finding) -> str:
     explanation = rule_explanation(finding.rule_id)
     if explanation:
         text = f"{text}; {explanation}"
-    return text + _discriminator_notes(finding.discriminators)
+    return text + _discriminator_notes(finding)
 
 
 def _per_rule_reasons(ordered: list[Finding]) -> list[str]:

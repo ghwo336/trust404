@@ -31,7 +31,7 @@ class Finding:
     discriminators: tuple[str, ...] = ()
     counts_for_escalation: bool = True
 
-    def to_json(self) -> dict:
+    def to_json(self, *, internal: bool = False) -> dict:
         obj: dict = {
             "rule_id": self.rule_id,
             "family": self.family,
@@ -45,6 +45,9 @@ class Finding:
             obj["lines"] = list(self.lines)
         if self.reasoning:
             obj["reasoning"] = self.reasoning
+        if internal:
+            obj["base_severity"] = self.base_severity
+            obj["discriminators"] = list(self.discriminators)
         return obj
 
 
@@ -55,11 +58,11 @@ class FileResult:
     reason: str = ""
     findings: tuple[Finding, ...] = ()
 
-    def to_json(self) -> dict:
+    def to_json(self, *, internal: bool = False) -> dict:
         obj: dict = {
             "file": self.file,
             "verdict": self.verdict,
-            "findings": [finding.to_json() for finding in self.findings],
+            "findings": [finding.to_json(internal=internal) for finding in self.findings],
         }
         if self.reason:
             obj["reason"] = self.reason
