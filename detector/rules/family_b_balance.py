@@ -10,6 +10,7 @@ from detector.analysis._ir import (
     depends,
     false_son,
     fn_ir,
+    function_sort_key,
     is_ctor,
     is_if_node,
     is_modifier,
@@ -17,6 +18,7 @@ from detector.analysis._ir import (
     is_require_assert_node,
     is_tx_origin,
     iter_internal_callees,
+    node_sort_key,
     root_state,
     true_son,
     values_feeding_condition,
@@ -298,6 +300,7 @@ def BAL_PRIV_MINT(ctx: ContractContext) -> list[Finding]:
             and w.key_source in _MINT_KEYS
             and (w.kind == "credit" or (w.kind == "set" and w.value_reads_same_key))
         ]
+        mint_writes.sort(key=lambda write: node_sort_key(write.node))
         supply_inc = any("inc" in _supply_changes(site, ctx.bindings.supply_vars) for site in _closure(fn))
         if not mint_writes and not supply_inc:
             continue
@@ -328,6 +331,7 @@ def BAL_PRIV_BURN_OTHER(ctx: ContractContext) -> list[Finding]:
             if write.kind != "debit" and not is_zero_set:
                 continue
             hits.append(write)
+        hits.sort(key=lambda write: node_sort_key(write.node))
         if not hits:
             continue
         extra: tuple[str, ...] = ()
@@ -358,6 +362,7 @@ def BAL_DIRECT_SET(ctx: ContractContext) -> list[Finding]:
             and w.key_source in ("param", "state")
             and not _const_zero(w.value, fn)
         ]
+        hits.sort(key=lambda write: node_sort_key(write.node))
         if not hits:
             continue
         extra: tuple[str, ...] = ()
@@ -379,7 +384,7 @@ def BAL_DIRECT_SET(ctx: ContractContext) -> list[Finding]:
 def BAL_TRANSFER_HIDDEN_MINT(ctx: ContractContext) -> list[Finding]:
     meta = _path_meta(ctx)
     credits = []
-    for fn in ctx.transfer_path:
+    for fn in sorted(ctx.transfer_path, key=function_sort_key):
         if is_ctor(fn) or is_modifier(fn):
             continue
         roles_map = meta.roles.get(id(fn), {})
@@ -393,7 +398,9 @@ def BAL_TRANSFER_HIDDEN_MINT(ctx: ContractContext) -> list[Finding]:
     other_raw_any = any(item[1].value_is_raw_amount and item[1].key_source != "to" for item in credits)
     if not other_raw and not (to_raw and other_raw_any):
         return []
-    fn, write = (other_raw or to_raw or credits)[0]
+    pick = other_raw or to_raw or credits
+    pick.sort(key=lambda item: (node_sort_key(item[1].node), function_sort_key(item[0])))
+    fn, write = pick[0]
     return [
         make_finding(
             "BAL_TRANSFER_HIDDEN_MINT",

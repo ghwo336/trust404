@@ -40,6 +40,7 @@ def _high_detector_classes() -> list[type]:
     for _name, obj in inspect.getmembers(all_detectors):
         if inspect.isclass(obj) and getattr(obj, "IMPACT", None) == DetectorClassification.HIGH:
             found.append(obj)
+    found.sort(key=lambda cls: (getattr(cls, "ARGUMENT", "") or "", cls.__name__))
     return found
 
 
@@ -93,18 +94,29 @@ def _targets_hit(elements: list, names: set[str]) -> bool:
     return False
 
 
+def _element_lines(element: dict) -> tuple[int, ...]:
+    mapping = element.get("source_mapping") or {}
+    return tuple(int(n) for n in (mapping.get("lines") or ()))
+
+
+def _function_element_key(element: dict) -> tuple:
+    return (str(element.get("name") or ""), _element_lines(element))
+
+
 def _first_function_element(elements: list, names: set[str]) -> dict | None:
+    matched: list[dict] = []
+    fallback: list[dict] = []
     for element in elements:
-        if not isinstance(element, dict):
-            continue
-        if element.get("type") != "function":
+        if not isinstance(element, dict) or element.get("type") != "function":
             continue
         if _element_contract(element) in names:
-            return element
-    for element in elements:
-        if isinstance(element, dict) and element.get("type") == "function":
-            return element
-    return None
+            matched.append(element)
+        else:
+            fallback.append(element)
+    pool = matched or fallback
+    if not pool:
+        return None
+    return min(pool, key=_function_element_key)
 
 
 def _basename_sol_parens(text: str) -> str:
@@ -121,8 +133,7 @@ def slither_high_overlay(ctx: ContractContext) -> list[Finding]:
     try:
         raw = _run_cached(ctx.slither)
         names = _target_names(ctx)
-        findings: list[Finding] = []
-        seen: set[tuple[str, str]] = set()
+        candidates: list[tuple[str, str, tuple[int, ...], str]] = []
         for group in raw or []:
             for item in group or []:
                 if not isinstance(item, dict):
@@ -134,26 +145,30 @@ def slither_high_overlay(ctx: ContractContext) -> list[Finding]:
                     continue
                 fn_el = _first_function_element(elements, names)
                 fn_name = str(fn_el.get("name") or "") if fn_el else ""
-                mapping = (fn_el or {}).get("source_mapping") or {}
-                lines = tuple(int(n) for n in (mapping.get("lines") or ()))
+                lines = _element_lines(fn_el) if fn_el else ()
                 check = str(item.get("check") or "")
                 desc = str(item.get("description") or "").strip().splitlines()
                 first = _basename_sol_parens(desc[0] if desc else "")
-                key = (check, fn_name)
-                if key in seen:
-                    continue
-                seen.add(key)
-                discs = () if check in EXPLOIT_SHAPE_CHECKS else ("evidence_only",)
-                findings.append(
-                    make_finding(
-                        "SLITHER_HIGH_OVERLAY",
-                        contract=ctx.contract.name,
-                        function=fn_name,
-                        lines=lines,
-                        reasoning=f"{check}: {first}",
-                        discriminators=discs,
-                    )
+                candidates.append((check, fn_name, lines, first))
+        candidates.sort(key=lambda item: (item[0], item[1], item[2], item[3]))
+        findings: list[Finding] = []
+        seen: set[tuple[str, str]] = set()
+        for check, fn_name, lines, first in candidates:
+            key = (check, fn_name)
+            if key in seen:
+                continue
+            seen.add(key)
+            discs = () if check in EXPLOIT_SHAPE_CHECKS else ("evidence_only",)
+            findings.append(
+                make_finding(
+                    "SLITHER_HIGH_OVERLAY",
+                    contract=ctx.contract.name,
+                    function=fn_name,
+                    lines=lines,
+                    reasoning=f"{check}: {first}",
+                    discriminators=discs,
                 )
+            )
         return findings
     except Exception:
         logger.warning("SLITHER_HIGH_OVERLAY failed", exc_info=True)

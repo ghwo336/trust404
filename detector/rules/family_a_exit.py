@@ -9,6 +9,7 @@ from detector.analysis._ir import (
     depends,
     false_son,
     fn_ir,
+    function_sort_key,
     is_ctor,
     is_if_node,
     is_modifier,
@@ -17,11 +18,13 @@ from detector.analysis._ir import (
     is_time_var,
     is_uint_type,
     iter_internal_callees,
+    node_sort_key,
     root_state,
     true_son,
     unique_functions,
 )
 from detector.analysis.context import ContractContext
+from detector.analysis.transfer_path import _path_meta
 from detector.model import Finding
 from detector.rules.base import (
     combined_shape_discriminators,
@@ -221,6 +224,7 @@ def _writer_fns(ctx: ContractContext, var) -> list:
             continue
         seen.add(id(fn))
         out.append(fn)
+    out.sort(key=lambda fn: (function_sort_key(fn), function_name(fn)))
     return out
 
 
@@ -235,6 +239,13 @@ def _writer_nodes(ctx: ContractContext, var) -> list:
             continue
         seen.add(key)
         out.append(pw)
+    out.sort(
+        key=lambda pw: (
+            node_sort_key(pw.node),
+            function_sort_key(pw.function),
+            function_name(pw.function),
+        )
+    )
     return out
 
 
@@ -342,9 +353,17 @@ def PRIV_ROLE(ctx: ContractContext) -> list[Finding]:
         atoms = privilege.auth_atoms(fn)
         if not atoms:
             continue
+        atoms_sorted = sorted(
+            atoms,
+            key=lambda atom: (
+                node_sort_key(atom.node),
+                atom.kind,
+                "" if atom.auth_var is None else atom.auth_var.name,
+            ),
+        )
         names = ", ".join(
             atom.kind if atom.auth_var is None else f"{atom.auth_var.name} ({atom.kind})"
-            for atom in atoms
+            for atom in atoms_sorted
         )
         _append_unique(
             out,
@@ -352,7 +371,7 @@ def PRIV_ROLE(ctx: ContractContext) -> list[Finding]:
                 "PRIV_ROLE",
                 contract=_cname(ctx),
                 function=function_name(fn),
-                lines=node_lines(atoms[0].node),
+                lines=node_lines(atoms_sorted[0].node),
                 reasoning=f"{function_name(fn)} gated by {names}",
             ),
         )
@@ -422,7 +441,7 @@ def _depends_on_var(value, var, function) -> bool:
 
 
 def _fee_denom(ctx: ContractContext, var) -> int:
-    for fn in ctx.transfer_path:
+    for fn in sorted(ctx.transfer_path, key=function_sort_key):
         helper = fn_ir(fn)
         for node in fn.nodes:
             for ir in node.irs:
@@ -479,11 +498,9 @@ def _fee_cap(ctx: ContractContext, var) -> bool:
 
 
 def _fee_impacts(ctx: ContractContext, var) -> list[tuple]:
-    from detector.analysis.transfer_path import _path_meta
-
     meta = _path_meta(ctx)
     hits: list[tuple] = []
-    for fn in ctx.transfer_path:
+    for fn in sorted(ctx.transfer_path, key=function_sort_key):
         if is_ctor(fn):
             continue
         roles_map = meta.roles.get(id(fn), {})
@@ -498,6 +515,7 @@ def _fee_impacts(ctx: ContractContext, var) -> list[tuple]:
         for node, _call, _src, _to, amount in flows.token_out_calls(fn, ctx.bindings):
             if _depends_on_var(amount, var, fn):
                 hits.append((fn, node))
+    hits.sort(key=lambda item: (node_sort_key(item[1]), function_sort_key(item[0])))
     return hits
 
 

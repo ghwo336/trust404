@@ -23,6 +23,7 @@ from detector.analysis._ir import (
     resolve_state_dest,
     solidity_call_name,
     unique_functions,
+    var_sort_key,
 )
 from detector.analysis.context import ContractContext
 from detector.analysis.flows import value_sends
@@ -136,6 +137,7 @@ def _pw_addrs_read(function: Function, ctx: ContractContext) -> list[StateVariab
             continue
         seen.add(id(var))
         found.append(var)
+    found.sort(key=var_sort_key)
     return found
 
 
@@ -182,7 +184,10 @@ def struct_external_gate(ctx: ContractContext) -> list[Finding]:
             continue
         if target not in ctx.privileged_writable:
             continue
-        writers = ctx.privileged_writable[target]
+        writers = sorted(
+            ctx.privileged_writable[target],
+            key=lambda pw: (function_sort_key(pw.function), _source_lines(pw.node)),
+        )
         writer_names = ", ".join(pw.function.name for pw in writers) or "?"
         item = _emit(
             "STRUCT_EXTERNAL_GATE",
@@ -233,6 +238,8 @@ def struct_delegatecall_settable(ctx: ContractContext) -> list[Finding]:
             if assembly_has_delegatecall(node):
                 for var in _pw_addrs_read(function, ctx):
                     dests.append((node, var))
+        dests.sort(key=lambda item: (_source_lines(item[0]), var_sort_key(item[1])))
+        param_nodes.sort(key=_source_lines)
         for node in param_nodes:
             add(
                 _emit(
@@ -251,7 +258,10 @@ def struct_delegatecall_settable(ctx: ContractContext) -> list[Finding]:
                 continue
             if dest.is_constant or dest.is_immutable:
                 continue
-            writers = ctx.privileged_writable[dest]
+            writers = sorted(
+                ctx.privileged_writable[dest],
+                key=lambda pw: (function_sort_key(pw.function), _source_lines(pw.node)),
+            )
             writer_names = ", ".join(pw.function.name for pw in writers) or "?"
             add(
                 _emit(
@@ -321,7 +331,10 @@ def struct_proxy_eoa_admin(ctx: ContractContext) -> list[Finding]:
     for fallback in fallbacks:
         impls = _pw_addrs_read(fallback, ctx)
         for impl in impls:
-            writers = ctx.privileged_writable.get(impl, [])
+            writers = sorted(
+                ctx.privileged_writable.get(impl, []),
+                key=lambda pw: (function_sort_key(pw.function), _source_lines(pw.node)),
+            )
             if not writers:
                 continue
             if not all(_single_addr_admin(pw.function) for pw in writers):

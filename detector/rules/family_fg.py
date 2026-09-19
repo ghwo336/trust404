@@ -26,6 +26,7 @@ from detector.analysis._ir import (
     elem_name,
     false_son,
     fn_ir,
+    function_sort_key,
     guarded_nodes,
     guards_of_node,
     index_chain,
@@ -186,6 +187,7 @@ def drain_approval_pull(ctx: ContractContext) -> list[Finding]:
                 if _sender_dependent(args[1], function):
                     continue
                 pulls.append((node, ir))
+        pulls.sort(key=lambda item: _source_lines(item[0]))
         if not pulls:
             continue
         if _sender_keyed_write(function) or _sends_to_sender(function, ctx):
@@ -586,7 +588,8 @@ def _shadowed_role_hits(ctx: ContractContext) -> list[tuple[Function, Any, str]]
         ]
         if not any(_has_eth_exit(fn) for fn in gated):
             continue
-        writers = _non_ctor_writers(ctx, shadow)
+        gated.sort(key=function_sort_key)
+        writers = sorted(_non_ctor_writers(ctx, shadow), key=function_sort_key)
         site = writers[0] if writers else gated[0]
         hits.append(
             (

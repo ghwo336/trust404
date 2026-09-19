@@ -234,7 +234,10 @@ def fee_addr_mutable(ctx: ContractContext) -> list[Finding]:
             hits.append((function, node, dest))
 
     for function, node, var in hits:
-        writers = ctx.privileged_writable.get(var, [])
+        writers = sorted(
+            ctx.privileged_writable.get(var, []),
+            key=lambda pw: (function_sort_key(pw.function), _source_lines(pw.node)),
+        )
         writer_names = ", ".join(pw.function.name for pw in writers) or "?"
         add(
             _emit(

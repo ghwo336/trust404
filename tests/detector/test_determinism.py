@@ -2,13 +2,40 @@
 
 from __future__ import annotations
 
+import difflib
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
+
+# Tier 2 files whose rules-layer / Slither-overlay representatives drifted
+# across PYTHONHASHSEED (DT-1). Flat copies keep bench-mode input deterministic.
+_TIER2_DRIFT_FILES = (
+    REPO
+    / "cases/tier2_realworld/crpwarner/0x186ED770eEcEA82Def7C92DCC077C4Ba27acD5BD_sol"
+    / "0x186ED770eEcEA82Def7C92DCC077C4Ba27acD5BD_sol.sol",
+    REPO
+    / "cases/tier2_realworld/crpwarner/0xcb6CD204D783DC8d66896A6DEf5867d332228D7b_sol"
+    / "0xcb6CD204D783DC8d66896A6DEf5867d332228D7b_sol.sol",
+    REPO
+    / "cases/tier2_realworld/crpwarner/0x831467b7B6BF9C705dC87899d48b57eE55C8d5cc_sol"
+    / "0x831467b7B6BF9C705dC87899d48b57eE55C8d5cc_sol.sol",
+    REPO
+    / "cases/tier2_realworld/honeybadger"
+    / "uninitialised_struct_0xe6f245bb5268b16c5d79a349ec57673e477bd015_sol"
+    / "uninitialised_struct_0xe6f245bb5268b16c5d79a349ec57673e477bd015_sol.sol",
+    REPO
+    / "cases/tier2_realworld/crpwarner/0x9dB8a10C7FE60d84397860b3aF2E686D4F90C2b7_sol"
+    / "0x9dB8a10C7FE60d84397860b3aF2E686D4F90C2b7_sol.sol",
+    REPO
+    / "cases/tier2_realworld/pied-piper"
+    / "real_0x2467aa6b5a2351416fd4c3def8462d841feeecec_sol"
+    / "real_0x2467aa6b5a2351416fd4c3def8462d841feeecec_sol.sol",
+)
 
 
 def _fn_sig(fn) -> str:
@@ -113,6 +140,67 @@ def test_analysis_byte_identical_across_hash_seeds() -> None:
         ["credit", "to", True],
         ["debit", "from", True],
     ]
+
+
+def test_tier2_results_byte_identical_across_hash_seeds(tmp_path: Path) -> None:
+    """DT-1: bench-mode results.json is byte-identical across PYTHONHASHSEED."""
+    input_dir = tmp_path / "input"
+    input_dir.mkdir()
+    for src in _TIER2_DRIFT_FILES:
+        assert src.is_file(), src
+        shutil.copy2(src, input_dir / src.name)
+
+    seeds = ["0", "1", "2"]
+    env_base = os.environ.copy()
+    env_base["PYTHONPATH"] = str(REPO)
+    payloads: list[bytes] = []
+    for seed in seeds:
+        out_path = tmp_path / f"out{seed}" / "results.json"
+        out_path.parent.mkdir()
+        env = env_base.copy()
+        env["PYTHONHASHSEED"] = seed
+        proc = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "detector.cli",
+                str(input_dir),
+                str(out_path),
+            ],
+            cwd=REPO,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert proc.returncode == 0, proc.stderr
+        payloads.append(out_path.read_bytes())
+
+    if not all(blob == payloads[0] for blob in payloads):
+        left, right = next(
+            (i, j)
+            for i, a in enumerate(payloads)
+            for j, b in enumerate(payloads)
+            if i < j and a != b
+        )
+        diff = "".join(
+            difflib.unified_diff(
+                payloads[left].decode().splitlines(keepends=True),
+                payloads[right].decode().splitlines(keepends=True),
+                fromfile=f"PYTHONHASHSEED={seeds[left]}",
+                tofile=f"PYTHONHASHSEED={seeds[right]}",
+                n=3,
+            )
+        )
+        raise AssertionError(
+            f"results.json differed across PYTHONHASHSEED values:\n{diff}"
+        )
+
+    data = json.loads(payloads[0])
+    verdicts = {item["file"]: item["verdict"] for item in data["results"]}
+    assert verdicts, "expected six file results"
+    assert all(verdict == "Malicious" for verdict in verdicts.values()), verdicts
+    assert len(verdicts) == len(_TIER2_DRIFT_FILES), verdicts
 
 
 if __name__ == "__main__":

@@ -5,13 +5,16 @@ from __future__ import annotations
 from detector.analysis import privilege, roles
 from detector.analysis._ir import (
     fn_ir,
+    function_sort_key,
     is_address_var,
     is_ctor,
     is_modifier,
     is_msg_sender,
     iter_internal_callees,
+    node_sort_key,
     root_state,
     unique_functions,
+    var_sort_key,
 )
 from detector.analysis.context import ContractContext
 from detector.analysis.privilege import unprivileged_writers
@@ -27,7 +30,7 @@ def _cname(ctx: ContractContext) -> str:
     return contract_name(ctx.contract)
 
 
-def _gating_auth(ctx: ContractContext) -> set[StateVariable]:
+def _gating_auth(ctx: ContractContext) -> list[StateVariable]:
     used: set[StateVariable] = set()
     for fn in unique_functions(ctx.contract):
         if is_ctor(fn):
@@ -37,7 +40,7 @@ def _gating_auth(ctx: ContractContext) -> set[StateVariable]:
         for atom in privilege.auth_atoms(fn):
             if atom.auth_var is not None:
                 used.add(atom.auth_var)
-    return used
+    return sorted(used, key=var_sort_key)
 
 
 def _gated_functions(ctx: ContractContext, auth_var: StateVariable) -> list:
@@ -49,6 +52,7 @@ def _gated_functions(ctx: ContractContext, auth_var: StateVariable) -> list:
             continue
         if any(atom.auth_var is auth_var for atom in privilege.auth_atoms(fn)):
             out.append(fn)
+    out.sort(key=function_sort_key)
     return out
 
 
@@ -62,6 +66,7 @@ def OWN_HIDDEN_ROLE(ctx: ContractContext) -> list[Finding]:
             continue
         fn = gated[0]
         atoms = [a for a in privilege.auth_atoms(fn) if a.auth_var is var]
+        atoms.sort(key=lambda atom: (node_sort_key(atom.node), atom.kind))
         node = atoms[0].node if atoms else fn.entry_point
         out.append(
             make_finding(
@@ -123,7 +128,7 @@ def _is_nonzero_literal_or_sender(var, function) -> bool:
     return False
 
 
-def _auth_assignments(function, auth: set[StateVariable]) -> list[tuple]:
+def _auth_assignments(function, auth) -> list[tuple]:
     """Return (var, node, kind) where kind is zero|nonzero|other."""
     found: list[tuple] = []
     stack = [function]
@@ -179,11 +184,13 @@ def OWN_FAKE_RENOUNCE(ctx: ContractContext) -> list[Finding]:
         zeroed = {var for var, _node, kind in assigns if kind == "zero"}
         if not zeroed:
             continue
-        uncleared = [var for var in gating if var not in zeroed]
+        uncleared = sorted((var for var in gating if var not in zeroed), key=var_sort_key)
         nonzero = [item for item in assigns if item[2] == "nonzero"]
         if not uncleared and not nonzero:
             continue
-        node = next(n for _v, n, k in assigns if k == "zero")
+        zero_nodes = [n for _v, n, k in assigns if k == "zero"]
+        zero_nodes.sort(key=node_sort_key)
+        node = zero_nodes[0]
         names = ", ".join(v.name for v in uncleared) if uncleared else "nonzero write"
         extra = ("two_step_handoff",) if roles.two_step_handoff(ctx, fn) else ()
         out.append(
@@ -245,6 +252,7 @@ def OWN_REASSIGN_NONSTD(ctx: ContractContext) -> list[Finding]:
                 continue
             assigns = _auth_assignments(fn, {var})
             hits = [item for item in assigns if item[2] == "nonzero"]
+            hits.sort(key=lambda item: node_sort_key(item[1]))
             if not hits:
                 continue
             extra_list = []
@@ -282,6 +290,13 @@ def OWN_TX_ORIGIN(ctx: ContractContext) -> list[Finding]:
         atoms = [a for a in privilege.auth_atoms(fn) if a.sender_source == "tx.origin"]
         if not atoms:
             continue
+        atoms.sort(
+            key=lambda atom: (
+                node_sort_key(atom.node),
+                atom.kind,
+                "" if atom.auth_var is None else atom.auth_var.name,
+            )
+        )
         out.append(
             make_finding(
                 "OWN_TX_ORIGIN",
