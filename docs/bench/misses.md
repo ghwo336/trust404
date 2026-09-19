@@ -21,6 +21,18 @@ Run 1 — 2026-09-19, `bench run detector --no-docker --tier 1 --tier 3` (Tier 0
 | 2026-09-19 | detector | (all, `--repeat 2`) | deterministic | run0/run1 differ | reporting | overlay reasoning embeds Slither's description with the staging path (`.bench_work/detector/run0/...`); strip path fragments, keep `#lines` | fixed (run 2: determinism pass) |
 
 Run 2 — same tiers after the overlay fix: weighted 0.8981, determinism pass. Remaining `score < 1` rows are all the doctrine rows below.
+
+Tier 2 compile triage (250 of 779 sources did not compile at ingest; first solc error bucketed, then re-measured through the retry ladder):
+
+| date | tool | case id | expected | got | bucket | fix | status |
+|---|---|---|---|---|---|---|---|
+| 2026-09-19 | detector | tier2/* 42 files, exact pragma (`0.4.25`, `0.8.19`, `0.5.16`, …) | compile | `requires different compiler version` | compile | ladder rung (a): relax pragma, same picked minor; 35 rescued, 6 broken underneath, 1 fixed by constraint-aware pick | fixed (35/42) |
+| 2026-09-19 | detector | tier2/* 33 files, no pragma (2017-era) | compile | 0.8.20 parser error | compile | ladder rung (b): no pragma → try 0.4.26, 0.5.17, 0.6.12, 0.7.6; 27 rescued, 6 syntax-broken at every 0.4.x (verified on 0.4.11/0.4.19 too) | fixed (27/33) |
+| 2026-09-19 | detector | tier2/crpwarner 7 files, duplicate SPDX | compile | `Multiple SPDX license identifiers` | compile | ladder rung (c) removes the error, but all 7 then hit missing imports (partial flattening) | unfixable |
+| 2026-09-19 | detector | tier2/pied-piper 171 `injected_*` | compile | undeclared identifier / modifier without `_` / bool→uint | compile | dataset injection produced non-compiling code; no compiler version accepts it | unfixable (dataset) |
+| 2026-09-19 | detector | tier2/* 16 files, missing imports / garbage | compile | `Source "…" not found` | compile | dependency files absent from the dataset | unfixable (dataset) |
+
+Net: 529 → 592 compiling of 779 (76%); the 187 remaining are `Uncertain(compile_failed)` by construction and are labelled `Uncertain` in the corpus.
 | 2026-09-19 | detector | tier1/{BAL_PRIV_MINT,EXIT_AMOUNT_LIMIT,EXIT_GLOBAL_SWITCH,PRIV_ROLE}/ben | Benign (acc. Uncertain) | Uncertain(med_findings) | doctrine | capped mint / bounded window / unpause exists / documented blacklist role → MED by design | wontfix |
 | 2026-09-19 | detector | tier3/{usdc_fiattoken,oz_erc20_pausable_ownable,oz_erc20capped_accesscontrol,reflection_token,bancor_smarttoken} | Benign (acc. Uncertain) | Uncertain(med_findings) | doctrine | disclosed/managed privilege (blacklister, pauser, minter cap, issuer) → MED; no HIGH survived | wontfix |
 | 2026-09-19 | detector | tier3/lido_ldo_minime | Benign (acc. Uncertain) | Uncertain(external_dependency) | doctrine | `doTransfer` calls settable `controller` → STRUCT_EXTERNAL_GATE MED, as spec'd | wontfix |
