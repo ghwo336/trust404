@@ -8,7 +8,29 @@ from pathlib import Path
 
 from slither import Slither
 
-INSTALLED_SOLC = ("0.4.26", "0.5.17", "0.6.12", "0.7.6", "0.8.20", "0.8.24")
+INSTALLED_SOLC = (
+    "0.4.26",
+    "0.5.17",
+    "0.6.12",
+    "0.7.6",
+    "0.8.20",
+    # Contiguous 0.8.24..0.8.37 so an exact `pragma solidity 0.8.3x;` in a recent sample
+    # resolves to a real binary instead of a nearest-minor mismatch (compile_failed).
+    "0.8.24",
+    "0.8.25",
+    "0.8.26",
+    "0.8.27",
+    "0.8.28",
+    "0.8.29",
+    "0.8.30",
+    "0.8.31",
+    "0.8.32",
+    "0.8.33",
+    "0.8.34",
+    "0.8.35",
+    "0.8.36",
+    "0.8.37",
+)
 DEFAULT_SOLC = "0.8.20"
 SOLC_ARTIFACTS = Path.home() / ".solc-select" / "artifacts"
 

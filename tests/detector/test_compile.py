@@ -6,7 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from detector.compile import CompileError, compile_file, oz_remapping, pick_solc
+from detector.compile import (
+    INSTALLED_SOLC,
+    CompileError,
+    compile_file,
+    oz_remapping,
+    pick_solc,
+    solc_binary,
+)
 from detector.engine import target_contracts
 from tests.detector.conftest import HARNESS, TIER3
 
@@ -19,10 +26,26 @@ from tests.detector.conftest import HARNESS, TIER3
         ("pragma solidity 0.4.24;", "0.4.26"),
         ("contract NoPragma {}", "0.8.20"),
         ("pragma solidity 0.5.0;", "0.5.17"),
+        ("pragma solidity 0.8.28;", "0.8.28"),
+        ("pragma solidity ^0.8.26;", "0.8.26"),
+        ("pragma solidity 0.8.37;", "0.8.37"),
     ],
 )
 def test_pick_solc_table(source: str, expected: str) -> None:
     assert pick_solc(source) == expected
+
+
+def test_every_installed_solc_has_a_binary() -> None:
+    """Pins in INSTALLED_SOLC must exist on disk, or pick_solc hands out a version that cannot run."""
+    missing = [v for v in INSTALLED_SOLC if not solc_binary(v).exists()]
+    assert missing == []
+
+
+def test_recent_exact_pragma_compiles(tmp_path: Path) -> None:
+    src = tmp_path / "Recent.sol"
+    src.write_text("pragma solidity 0.8.30;\ncontract Recent { uint256 public x; }\n")
+    slither = compile_file(src)
+    assert [c.name for c in target_contracts(slither, src)] == ["Recent"]
 
 
 def test_compile_fail_raises_compile_error() -> None:

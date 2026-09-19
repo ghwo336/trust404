@@ -81,7 +81,7 @@ One result per `.sol` file under the input root (recursive, sorted by relative P
 
 ### `compile.py`
 
-- `INSTALLED_SOLC = ("0.4.26", "0.5.17", "0.6.12", "0.7.6", "0.8.20", "0.8.24")`, `DEFAULT_SOLC = "0.8.20"`.
+- `INSTALLED_SOLC = ("0.4.26", "0.5.17", "0.6.12", "0.7.6", "0.8.20", "0.8.24", …, "0.8.37")` (contiguous 0.8.24..0.8.37 so exact recent pragmas resolve), `DEFAULT_SOLC = "0.8.20"`. The Dockerfile's `solc-select install` loop must list the same versions.
 - `pick_solc(source: str) -> str` — nearest installed same-minor version to the first version in the `pragma solidity` statement; default `0.8.20` when absent/unknown minor. Same algorithm as `tools/baseline_slither/tool.py`.
 - `solc_binary(version: str) -> Path` — `~/.solc-select/artifacts/solc-<v>/solc-<v>`.
 - `oz_remapping() -> str | None` — `@openzeppelin/contracts/=<dir>/` where `<dir>` is `$DETECTOR_OZ_DIR` if set, else `<repo>/vendor/openzeppelin-contracts`, else `/app/vendor/openzeppelin-contracts`; `None` if none exists.
