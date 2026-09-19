@@ -9,7 +9,7 @@ from pathlib import Path
 from slither import Slither
 
 from detector.analysis.context import ContractContext
-from detector.compile import CompileError, compile_file
+from detector.compile import CompileError, cleanup_temp_copies, compile_file_ex, is_temp_copy
 from detector.model import FileResult, Finding
 from detector.policy import decide, finalize
 from detector.rules import RULES
@@ -75,11 +75,21 @@ def _dedupe_findings(findings: list[Finding]) -> list[Finding]:
 
 
 def _analyze_in_process(path: str, rel: str) -> dict:
-    slither = compile_file(Path(path))
+    """Compile (with the retry ladder), run rules per target contract, decide.
+
+    Returns FileResult JSON plus an internal `compile_note` key (relayed to the parent's log;
+    never written to results.json).
+    """
+    compiled = compile_file_ex(Path(path))
+    if compiled.note:
+        logger.info("compile note for %s: %s", rel, compiled.note)
+    slither = compiled.slither
     findings: list[Finding] = []
     shape_flag = False
+    # Provenance root stays the ORIGINAL path; a ladder temp copy sits in the same directory.
     input_root = _input_root(Path(path), rel)
-    for contract in target_contracts(slither, Path(path)):
+    # Slither filenames point at the file it parsed (temp copy when the ladder rewrote the source).
+    for contract in target_contracts(slither, compiled.source_path):
         ctx = ContractContext(slither=slither, contract=contract, input_root=input_root)
         raw: list[Finding] = []
         for rule in RULES:
@@ -89,12 +99,15 @@ def _analyze_in_process(path: str, rel: str) -> dict:
         shape_flag = shape_flag or shape_applied
     findings = _dedupe_findings(findings)
     verdict, reason = decide(findings, suppress_escalation=shape_flag)
-    return FileResult(
+    payload = FileResult(
         file=rel,
         verdict=verdict,
         reason=reason,
         findings=tuple(findings),
     ).to_json()
+    if compiled.note:
+        payload["compile_note"] = compiled.note
+    return payload
 
 
 def _worker(fn, path: str, rel: str, queue) -> None:
@@ -146,13 +159,20 @@ def analyze_file(
         if proc.is_alive():
             proc.kill()
             proc.join()
+        # A killed worker skips compile_file_ex's cleanup; drop any temp copy it left behind.
+        for leftover in cleanup_temp_copies(path):
+            logger.warning("removed leftover ladder temp copy %s after timeout", leftover)
         return FileResult(rel, "Uncertain", reason="timeout")
     try:
         status, payload = queue.get(timeout=1)
     except Exception as exc:
         logger.warning("worker exited without result for %s: %s", rel, exc)
+        cleanup_temp_copies(path)
         return FileResult(rel, "Uncertain", reason="analysis_error")
     if status == "ok":
+        note = payload.get("compile_note") if isinstance(payload, dict) else None
+        if note:
+            logger.info("compile note for %s: %s", rel, note)
         try:
             return _file_result_from_worker(payload)
         except Exception as exc:
@@ -166,7 +186,8 @@ def analyze_file(
 def analyze_dir(input_dir: Path, *, timeout_s: int = WORKER_TIMEOUT_DEFAULT) -> list[FileResult]:
     root = Path(input_dir).resolve()
     results: list[FileResult] = []
-    for path in sorted(p for p in root.rglob("*.sol") if p.is_file()):
+    # Skip `<stem>.__relaxed__.sol` ladder copies (stray ones from a killed worker are inputs' shadows).
+    for path in sorted(p for p in root.rglob("*.sol") if p.is_file() and not is_temp_copy(p)):
         rel = path.relative_to(root).as_posix()
         try:
             results.append(analyze_file(path, rel, timeout_s=timeout_s))

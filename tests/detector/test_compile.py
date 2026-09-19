@@ -14,6 +14,7 @@ from detector.compile import (
     TEMP_COPY_SUFFIX,
     CompileError,
     CompileResult,
+    cleanup_temp_copies,
     compile_file,
     compile_file_ex,
     is_temp_copy,
@@ -261,6 +262,19 @@ def test_temp_copy_suffix_and_predicate(tmp_path: Path) -> None:
     assert TEMP_COPY_SUFFIX.endswith(".sol")
     assert is_temp_copy(tmp_path / f"Token{TEMP_COPY_SUFFIX}")
     assert not is_temp_copy(tmp_path / "Token.sol")
+
+
+def test_cleanup_temp_copies_removes_only_the_sibling_copy(tmp_path: Path) -> None:
+    src = tmp_path / "Token.sol"
+    src.write_text("pragma solidity 0.8.20; contract Token {}\n")
+    other = tmp_path / f"Other{TEMP_COPY_SUFFIX}"
+    other.write_text("")
+    assert cleanup_temp_copies(src) == []
+    stray = tmp_path / f"Token{TEMP_COPY_SUFFIX}"
+    stray.write_text("")
+    assert cleanup_temp_copies(src) == [stray.resolve()]
+    assert not stray.exists()
+    assert other.exists() and src.exists()
 
 
 def test_good_files_never_trigger_the_ladder() -> None:

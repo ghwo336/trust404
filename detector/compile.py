@@ -249,6 +249,15 @@ def _temp_copy_path(canonical: Path) -> Path:
     return canonical.with_name(canonical.stem + TEMP_COPY_SUFFIX)
 
 
+def cleanup_temp_copies(path: Path) -> list[Path]:
+    """Remove the ladder temp copy for `path` if a killed worker left one behind; returns what was removed."""
+    temp = _temp_copy_path(Path(path).resolve())
+    if not temp.is_file():
+        return []
+    temp.unlink(missing_ok=True)
+    return [temp]
+
+
 def _relax_pragmas(source: str) -> str:
     """Replace every `pragma solidity ...;` with RELAXED_PRAGMA, preserving line count."""
 
