@@ -8,7 +8,7 @@ import pytest
 
 from detector.compile import CompileError, compile_file, oz_remapping, pick_solc
 from detector.engine import target_contracts
-from tests.detector.conftest import HARNESS
+from tests.detector.conftest import HARNESS, TIER3
 
 
 @pytest.mark.parametrize(
@@ -48,9 +48,21 @@ def test_multi_file_token_excludes_helper_library(slither_for) -> None:
     path = HARNESS / "multi_file" / "Token.sol"
     slither = slither_for(path)
     names = [c.name for c in target_contracts(slither, path)]
-    assert "Token" in names
+    assert names == ["Token"]
     assert "Helper" not in names
     helper_path = HARNESS / "multi_file" / "Helper.sol"
     helper_slither = slither_for(helper_path)
     helper_names = [c.name for c in target_contracts(helper_slither, helper_path)]
     assert helper_names == []
+
+
+def test_target_contracts_are_leaves_only(slither_for) -> None:
+    usdc = TIER3 / "usdc_fiattoken" / "FiatTokenV1.sol"
+    assert [c.name for c in target_contracts(slither_for(usdc), usdc)] == ["FiatTokenV1"]
+    bancor = TIER3 / "bancor_smarttoken" / "SmartToken.sol"
+    assert [c.name for c in target_contracts(slither_for(bancor), bancor)] == ["SmartToken"]
+    minime = TIER3 / "lido_ldo_minime" / "MiniMeToken.sol"
+    assert [c.name for c in target_contracts(slither_for(minime), minime)] == [
+        "MiniMeToken",
+        "MiniMeTokenFactory",
+    ]

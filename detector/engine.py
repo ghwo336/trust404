@@ -43,7 +43,23 @@ def target_contracts(slither: Slither, path: Path) -> list:
             continue
         selected.append(contract)
     selected.sort(key=lambda contract: (contract.source_mapping.start, contract.name))
-    return selected
+    inherited_ids = {id(base) for contract in selected for base in contract.inheritance}
+    leaves = [contract for contract in selected if id(contract) not in inherited_ids]
+    return [contract for contract in leaves if _has_implemented_body(contract)]
+
+
+def _has_implemented_body(contract) -> bool:
+    """Drop 0.4 callback stubs (e.g. ApproveAndCallFallBack) that Slither does not mark abstract."""
+    declared = [
+        fn
+        for fn in getattr(contract, "functions_declared", []) or []
+        if not fn.is_constructor and not fn.is_constructor_variables
+    ]
+    if not declared:
+        return True
+    if all((not fn.is_implemented) or getattr(fn, "is_empty", False) for fn in declared):
+        return False
+    return True
 
 
 def _analyze_in_process(path: str, rel: str) -> dict:

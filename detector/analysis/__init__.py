@@ -1,1 +1,1 @@
-"""Shared analysis helpers. Phase 4a ships a minimal ContractContext only."""
+"""Shared analysis helpers. Phase 4a: name-agnostic predicates on Slither IR."""

@@ -152,6 +152,17 @@ One result per `.sol` file under the input root (recursive, sorted by relative P
 - `has_custody(ctx) -> bool` — some non-privileged `payable` function exists whose `msg.value` is not forwarded in full by an external call in the same function (MiniMe's `proxyPayment` forward is not custody; a vault `deposit()` is).
 - `ungate_exists(ctx, var, end_node) -> bool` — some privileged write of `var` can produce the *permissive* value for `end_node` (for `require(!paused)`: a write of `false` or of a parameter; for `require(enabled)`: a write of `true` or of a parameter).
 
+### Implementation notes recorded in 4a (interface deltas, not scope changes)
+
+- `unprivileged_writers` counts only public/external callers (writes in their internal callees are attributed to them); internal helpers such as OZ `_pause` are not writers on their own.
+- `map_bool` auth atoms require **positive polarity** (the function proceeds iff the mapping value is true). `require(!m[msg.sender])` is a deny-list gate, never auth.
+- `arith_kind` accepts non-`pure` helpers that write no state (0.4 `safeAdd`/`safeSub`).
+- `is_whole_pot(value, function)`, `is_amount_dependent(var, function, ctx)`, `balance_writes(function, bindings, param_roles=...)`, and optional `ctx` on `transfer_roots/transfer_path/end_nodes` carry context for caching / role mapping.
+- `tx.origin` compares are kind `tx_origin` (not `eq_state_address`).
+- `engine.target_contracts` returns **leaf** contracts only (not inherited by another selected contract in the file) and drops 0.4 callback stubs with only unimplemented functions.
+- Shared IR helpers live in `analysis/_ir.py`. All result-affecting iteration is ordered; caches are strong refs pinned on the context (determinism test in `tests/detector/test_determinism.py`).
+- Known gap: storage-pointer writes (`updateValueAtNow(balances[x], v)`) are not attributed to the bound mapping.
+
 ### `analysis/flows.py`
 
 - `value_sends(function) -> list[(node, to_expr, value_expr, kind ∈ {"transfer","send","call_value","selfdestruct"})]` — ETH leaving the contract.

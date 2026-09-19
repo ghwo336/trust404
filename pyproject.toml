@@ -28,3 +28,4 @@ baybench = ["schema/*.json", "catalog.yaml", "tools.yaml"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+addopts = "--import-mode=importlib"
