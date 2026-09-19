@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -13,6 +15,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 class RunnerError(RuntimeError):
     pass
+
+
+_UNSET_ENV_RE = re.compile(r"\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?")
 
 
 def stage_tiers(
@@ -79,7 +84,15 @@ def run_tool(
         if not cmd:
             raise RunnerError(f"tool {tool_cfg.get('name')!r} missing 'cmd' for command mode")
         substituted = cmd.replace("{input}", str(input_dir)).replace("{output}", str(out_dir))
-        argv = shlex.split(substituted)
+        expanded = os.path.expandvars(substituted)
+        leftover = sorted(set(_UNSET_ENV_RE.findall(expanded)))
+        if leftover:
+            name = tool_cfg.get("name")
+            raise RunnerError(
+                f"tool {name!r}: cmd references unset environment variable(s) {leftover}; "
+                f"export them (e.g. `export T404_DIR=~/T404`) or edit baybench/tools.yaml"
+            )
+        argv = shlex.split(expanded)
         run_cwd = str(cwd) if cwd is not None else str(REPO_ROOT)
     t0 = time.perf_counter()
     try:

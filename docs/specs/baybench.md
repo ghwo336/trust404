@@ -113,7 +113,11 @@ tools:
     image: baybench/baseline_keyword:latest      # docker mode
   - name: my_local_tool
     cmd: "python /path/tool.py --in {input} --out {output}/results.json"   # --no-docker mode
+  - name: teammate_tool
+    cmd: "node ${T404_DIR}/dist/baybench.js {input} {output}/results.json"  # env-relative
 ```
+
+`cmd` (amended 2026-09-20, teammate portability): after `{input}`/`{output}` substitution the string goes through `os.path.expandvars`, so a registry entry may point at a teammate's checkout via an environment variable instead of an absolute local path. An unresolved `${VAR}` / `$VAR` is a `RunnerError` that names the variable and the tool (no silent literal path). The command runs with `cwd` = repo root, so `../sibling` relative paths are the other portable form. The registry is committed; machine-specific absolute paths are not.
 
 ## Report
 

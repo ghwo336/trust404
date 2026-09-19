@@ -138,3 +138,68 @@ def test_run_tool_docker_mode_requires_image(tmp_path: Path) -> None:
     input_dir.mkdir()
     with pytest.raises(RunnerError):
         run_tool({"name": "noimg"}, input_dir, out_dir, use_docker=True)
+
+
+def test_run_tool_cmd_mode_expands_env_vars(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    script = tmp_path / "tool.py"
+    script.write_text(
+        "\n".join(
+            [
+                "import json, sys",
+                "from pathlib import Path",
+                "input_dir = sys.argv[1]",
+                "results_path = Path(sys.argv[2])",
+                "results_path.write_text(",
+                "    json.dumps({",
+                "        'tool': {'name': 'fake'},",
+                "        'results': [{'file': 'a.sol', 'verdict': 'Benign'}],",
+                "    }),",
+                "    encoding='utf-8',",
+                ")",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("BENCH_TEST_TOOL_DIR", str(tmp_path))
+    input_dir = tmp_path / "input"
+    out_dir = tmp_path / "output"
+    input_dir.mkdir()
+    tool_cfg = {
+        "name": "fake",
+        "cmd": f"{sys.executable} ${{BENCH_TEST_TOOL_DIR}}/tool.py {{input}} {{output}}/results.json",
+    }
+    res = run_tool(tool_cfg, input_dir, out_dir, use_docker=False)
+    assert res["tool"] == "fake"
+    assert isinstance(res["result"], ToolResult)
+    assert res["result"].results[0].file == "a.sol"
+    assert res["returncode"] == 0
+
+
+def test_run_tool_cmd_mode_unset_env_var_is_clear_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("BENCH_TEST_UNSET_VAR", raising=False)
+    input_dir = tmp_path / "input"
+    out_dir = tmp_path / "output"
+    input_dir.mkdir()
+    tool_cfg = {
+        "name": "envtool",
+        "cmd": f"{sys.executable} ${{BENCH_TEST_UNSET_VAR}}/tool.py {{input}} {{output}}/results.json",
+    }
+    with pytest.raises(RunnerError) as ei:
+        run_tool(tool_cfg, input_dir, out_dir, use_docker=False)
+    msg = str(ei.value)
+    assert "BENCH_TEST_UNSET_VAR" in msg
+    assert "envtool" in msg
+
+
+def test_tools_yaml_has_no_machine_specific_paths() -> None:
+    path = Path(__file__).resolve().parents[1] / "baybench" / "tools.yaml"
+    registry = yaml.safe_load(path.read_text(encoding="utf-8"))
+    for tool in registry["tools"]:
+        cmd = tool.get("cmd") or ""
+        assert "/Users/" not in cmd
+        assert "/home/" not in cmd
