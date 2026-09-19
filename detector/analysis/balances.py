@@ -200,6 +200,37 @@ def _debit_credit_fallback(contract: Any) -> tuple[StateVariable, ...] | None:
     return None
 
 
+def _paired_ledger_fallback(
+    contract: Any,
+) -> tuple[tuple[StateVariable, ...], tuple[StateVariable, ...]] | None:
+    """Ledger invariant without an ERC-20 ABI: one function moves a `mapping(address=>uint)`
+    slot and a plain `uint` state var in the same direction by the same amount
+    (`m[k] -= x; supply -= x;`). The pair is (balances, supply); a lone mapping is never bound."""
+    for fn in unique_functions(contract):
+        if is_ctor(fn) or not is_externally_callable(fn):
+            continue
+        helper = fn_ir(fn)
+        map_moves: list[tuple[StateVariable, WriteKind, Any]] = []
+        scalar_moves: list[tuple[StateVariable, WriteKind, Any]] = []
+        for node in fn.nodes:
+            for ir in node.irs:
+                var, _key, kind, value = _classify_mapping_write(node, fn, ir, None)
+                if var is None or kind not in ("credit", "debit") or value is None or var.is_constant:
+                    continue
+                if is_addr_to_uint_mapping(var):
+                    map_moves.append((var, kind, value))
+                elif is_uint_type(var.type) and not isinstance(var.type, MappingType):
+                    scalar_moves.append((var, kind, value))
+        for m_var, m_kind, m_val in map_moves:
+            for s_var, s_kind, s_val in scalar_moves:
+                if m_kind != s_kind:
+                    continue
+                same = m_val is s_val or helper.unwrap(m_val) is helper.unwrap(s_val)
+                if same or depends(s_val, m_val, fn) or depends(m_val, s_val, fn):
+                    return (m_var,), (s_var,)
+    return None
+
+
 def _allowance_fallback(contract: Any) -> tuple[StateVariable, ...] | None:
     approves = _fn_by_sig(contract, SIG_APPROVE)
     for fn in approves:
@@ -291,6 +322,11 @@ def bind(contract: Any) -> Bindings:
             supply_vars.append(named)
             getters = _fn_by_sig(contract, SIG_TOTAL_SUPPLY)
             total_supply = getters[0] if getters else None
+    if not balance_vars and not supply_vars:
+        paired = _paired_ledger_fallback(contract)
+        if paired is not None:
+            balance_vars.extend(paired[0])
+            supply_vars.extend(paired[1])
 
     allowance_vars: list[StateVariable] = []
     for fn in _fn_by_sig(contract, SIG_ALLOWANCE):

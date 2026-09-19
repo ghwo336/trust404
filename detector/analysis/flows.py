@@ -16,15 +16,21 @@ from slither.slithir.operations import (
 
 from detector.analysis._ir import (
     SELFDESTRUCT_NAMES,
+    SIG_ALLOWANCE,
+    SIG_APPROVE,
+    SIG_BALANCE_OF,
+    SIG_TOTAL_SUPPLY,
     SIG_TRANSFER,
     SIG_TRANSFER_FROM,
     assert_never,
     call_full_name,
     depends,
     fn_ir,
+    is_address_var,
     is_ctor,
     is_this_expr,
     is_whole_pot_value,
+    iter_external_calls,
     resolve_state_dest,
     solidity_call_name,
     unique_functions,
@@ -33,6 +39,10 @@ from detector.analysis.balances import Bindings
 
 SendKind = Literal["transfer", "send", "call_value", "selfdestruct"]
 TokenSource = Literal["param", "state", "this"]
+
+_ERC20_SIGS = frozenset(
+    {SIG_TRANSFER, SIG_TRANSFER_FROM, SIG_APPROVE, SIG_BALANCE_OF, SIG_TOTAL_SUPPLY, SIG_ALLOWANCE}
+)
 
 
 def value_sends(
@@ -57,6 +67,26 @@ def is_whole_pot(value_var: Any, function: Function | None = None) -> bool:
     if function is None:
         return False
     return is_whole_pot_value(value_var, function)
+
+
+def state_target_calls(function: Function) -> list[tuple[Any, Any, Any]]:
+    """External calls (not value sends, not ERC-20 ABI, not self-calls) whose destination is
+    a state variable: `(node, call, state_var)`. The straw-man shape is one of these next to
+    an ETH send to the caller."""
+    out: list[tuple[Any, Any, Any]] = []
+    for node in function.nodes:
+        for ir in iter_external_calls(node):
+            if ir.call_value is not None:
+                continue
+            if isinstance(ir, HighLevelCall) and call_full_name(ir) in _ERC20_SIGS:
+                continue
+            if is_this_expr(ir.destination, function):
+                continue
+            dest = resolve_state_dest(ir.destination, function)
+            if dest is None or not is_address_var(dest):
+                continue
+            out.append((node, ir, dest))
+    return out
 
 
 def payable_inflows(contract: Any) -> list[Function]:

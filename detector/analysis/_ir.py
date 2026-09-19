@@ -405,7 +405,14 @@ def depends(variable: Any, source: Any, context: Function) -> bool:
         return False
 
 
-def root_state(var: Any, function: Function | None = None) -> StateVariable | None:
+def root_state(
+    var: Any, function: Function | None = None, _seen: frozenset[int] = frozenset()
+) -> StateVariable | None:
+    # Non-SSA IR: a local re-assigned from itself (`x = x + ...` lowered through a
+    # TMP, or a plain `x = x`) makes the def chain cyclic; `_seen` bounds the walk.
+    if var is None or id(var) in _seen:
+        return None
+    _seen = _seen | {id(var)}
     if isinstance(var, StateVariable):
         return var
     if isinstance(var, ReferenceVariable):
@@ -413,17 +420,17 @@ def root_state(var: Any, function: Function | None = None) -> StateVariable | No
         if isinstance(origin, StateVariable):
             return origin
         if origin is not var:
-            return root_state(origin, function)
+            return root_state(origin, function, _seen)
     if function is not None:
         ir = fn_ir(function).def_of(var)
         if isinstance(ir, Index):
-            return root_state(ir.variable_left, function)
+            return root_state(ir.variable_left, function, _seen)
         if isinstance(ir, Member):
-            return root_state(ir.variable_left, function)
+            return root_state(ir.variable_left, function, _seen)
         if isinstance(ir, TypeConversion):
-            return root_state(ir.variable, function)
+            return root_state(ir.variable, function, _seen)
         if isinstance(ir, Assignment):
-            return root_state(ir.rvalue, function)
+            return root_state(ir.rvalue, function, _seen)
     return None
 
 
@@ -553,6 +560,9 @@ def values_feeding_condition(node: Node) -> list[Any]:
         elif isinstance(ir, Member):
             stack.append(ir.variable_left)
         elif isinstance(ir, (InternalCall, LibraryCall, HighLevelCall)):
+            stack.extend(ir.arguments or [])
+        elif isinstance(ir, SolidityCall) and solidity_call_name(ir) not in REQUIRE_ASSERT_NAMES:
+            # keccak256(answer) == hash: the hashed argument feeds the compare.
             stack.extend(ir.arguments or [])
     return ordered
 
@@ -720,6 +730,35 @@ def guarded_nodes(if_node: Node) -> set[Node]:
     return true_nodes - false_nodes
 
 
+def else_guarded_nodes(if_node: Node) -> set[Node]:
+    """Nodes reachable only through the false son (the `else` arm)."""
+    true_nodes = reachable_from(true_son(if_node), banned=(if_node,))
+    false_nodes = reachable_from(false_son(if_node), banned=(if_node,))
+    return false_nodes - true_nodes
+
+
+def guards_of_node(node: Node, function: Function) -> list[Node]:
+    """Condition nodes that decide whether `node` executes.
+
+    `if` nodes whose taken arm (either side) exclusively contains `node`, plus
+    `require`/`assert` nodes on the father paths from the entry. Unlike end-node
+    detection this does not require any arm to revert: a silent `if (ok) pay()` is
+    the honeypot shape.
+    """
+    entry = function.entry_point
+    above = ancestors(node, entry)
+    out: list[Node] = []
+    for cand in function.nodes:
+        if cand is node:
+            continue
+        if is_if_node(cand) and cand.type == NodeType.IF:
+            if node in guarded_nodes(cand) or node in else_guarded_nodes(cand):
+                out.append(cand)
+        elif is_require_assert_node(cand) and cand in above:
+            out.append(cand)
+    return sorted_nodes(out)
+
+
 def sender_literal_source(var: Any, helper: FnIR) -> str | None:
     cur = helper.unwrap(var)
     if is_msg_sender(cur) or is_msg_sender(var):
@@ -845,6 +884,36 @@ def is_whole_pot_value(value_var: Any, function: Function) -> bool:
             cur = ir.rvalue
             continue
         break
+    return False
+
+
+def pot_dependent(value_var: Any, function: Function, *, depth: int = 10) -> bool:
+    """`address(this).balance` feeds the value through arithmetic / copies / arith helpers.
+
+    `is_whole_pot_value` is the exact whole-pot test; this is the wider
+    data-dependence (`this.balance + msg.value`, `this.balance.mul(x).div(y)`).
+    """
+    helper = fn_ir(function)
+    stack: list[tuple[Any, int]] = [(value_var, depth)]
+    seen: set[int] = set()
+    while stack:
+        cur, left = stack.pop()
+        if cur is None or left <= 0 or id(cur) in seen:
+            continue
+        seen.add(id(cur))
+        if is_whole_pot_value(cur, function):
+            return True
+        ir = helper.def_of(cur)
+        if isinstance(ir, Binary):
+            stack.append((ir.variable_left, left - 1))
+            stack.append((ir.variable_right, left - 1))
+        elif isinstance(ir, TypeConversion):
+            stack.append((ir.variable, left - 1))
+        elif isinstance(ir, Assignment):
+            stack.append((ir.rvalue, left - 1))
+        elif isinstance(ir, (InternalCall, LibraryCall)):
+            for arg in ir.arguments or []:
+                stack.append((arg, left - 1))
     return False
 
 

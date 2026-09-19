@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from slither.core.cfg.node import Node
+from slither.core.cfg.node import Node, NodeType
 from slither.core.declarations.function import Function
 from slither.core.variables.state_variable import StateVariable
 from slither.core.variables.variable import Variable
@@ -29,8 +29,10 @@ from detector.analysis._ir import (
     bool_needed_true,
     branch_reverts_before_write,
     callee_of,
+    constant_bool,
     contract_cache,
     depends,
+    else_guarded_nodes,
     false_son,
     feeding_irs,
     fn_ir,
@@ -43,6 +45,7 @@ from detector.analysis._ir import (
     is_externally_callable,
     is_if_node,
     is_modifier,
+    is_msg_value,
     is_require_assert_node,
     iter_internal_callees,
     mapping_leaf_type,
@@ -277,8 +280,91 @@ def _atoms_from_call_return(
                         atoms.append(AuthAtom(node, "map_bool", root, "msg.sender"))
                     else:
                         assert_never(src)
+    if not atoms:
+        atoms.extend(_bool_helper_atoms(callee, node, call_taint))
+    if not atoms:
+        atoms.extend(_membership_call_atoms(callee, node, call_taint))
     _ = sender
     _ = addrs
+    return atoms
+
+
+def _membership_call_atoms(
+    callee: Function, call_node: Node, call_taint: dict[Variable, str]
+) -> list[AuthAtom]:
+    """`hasRole(role, account)` over a set library: the callee returns the bool of a
+    non-writing library / internal call whose arguments are the sender (tainted param)
+    and a reference rooted at a state variable (`_roles[role].members.contains(account)`).
+    Set membership keyed by the sender is a `map_bool` gate, whatever the set type."""
+    helper = fn_ir(callee)
+    atoms: list[AuthAtom] = []
+    for node in callee.nodes:
+        for ret in node.irs:
+            if not isinstance(ret, Return):
+                continue
+            for val in ret.values:
+                ir = helper.def_of(val)
+                if not isinstance(ir, (InternalCall, LibraryCall)) or not _leaf_is_bool(ir.lvalue):
+                    continue
+                inner = callee_of(ir)
+                if inner is None or inner.state_variables_written or inner.all_state_variables_written():
+                    continue
+                args = list(ir.arguments or [])
+                sources = [_normalize_sender(_sender_source_of(arg, callee, call_taint)) for arg in args]
+                roots = [root_state(arg, callee) for arg in args]
+                for i, src in enumerate(sources):
+                    if src is None:
+                        continue
+                    for j, root in enumerate(roots):
+                        if i == j or root is None:
+                            continue
+                        kind: AuthKind = "tx_origin" if src == "tx.origin" else "map_bool"
+                        atoms.append(AuthAtom(call_node, kind, root, src))
+    return atoms
+
+
+def _eq_compare_atoms(
+    irs: list[Any], node: Node, function: Function, taint: dict[Variable, str]
+) -> list[AuthAtom]:
+    """`msg.sender ==/!= <state address>` compares among `irs`, attributed to `node`."""
+    atoms: list[AuthAtom] = []
+    for ir in irs:
+        if not isinstance(ir, Binary) or ir.type not in _EQ_TYPES:
+            continue
+        left, right = ir.variable_left, ir.variable_right
+        for sender_side, other in ((left, right), (right, left)):
+            src = _normalize_sender(_sender_source_of(sender_side, function, taint))
+            if src is None:
+                continue
+            auth = _state_address_from_value(other, function)
+            if auth is None:
+                continue
+            atoms.append(AuthAtom(node, _kind_for_compare(src), auth, src))
+    return atoms
+
+
+def _returns_true_literal(nodes: set[Node]) -> bool:
+    for node in nodes:
+        for ir in node.irs:
+            if isinstance(ir, Return) and any(constant_bool(val) is True for val in ir.values):
+                return True
+    return False
+
+
+def _bool_helper_atoms(
+    callee: Function, call_node: Node, call_taint: dict[Variable, str]
+) -> list[AuthAtom]:
+    """`isOwner()`-style helpers: a state-free callee whose `true` result requires a
+    sender compare — `return Owner == msg.sender;` or `if (Owner == msg.sender) return true;`."""
+    if callee.state_variables_written or callee.all_state_variables_written():
+        return []
+    atoms: list[AuthAtom] = []
+    for node in callee.nodes:
+        if any(isinstance(ir, Return) for ir in node.irs):
+            atoms.extend(_eq_compare_atoms(list(node.irs), call_node, callee, call_taint))
+        if is_if_node(node) and _returns_true_literal(guarded_nodes(node)):
+            found = _eq_compare_atoms(list(node.irs), call_node, callee, call_taint)
+            atoms.extend(found)
     return atoms
 
 
@@ -297,17 +383,9 @@ def _atoms_in_node(node: Node, function: Function, taint: dict[Variable, str]) -
     if not feeding and not (is_require_assert_node(node) or is_if_node(node)):
         return atoms
 
+    for atom in _eq_compare_atoms(feeding_irs(node) + list(node.irs), node, function, taint):
+        add(atom)
     for ir in feeding_irs(node) + list(node.irs):
-        if isinstance(ir, Binary) and ir.type in _EQ_TYPES:
-            left, right = ir.variable_left, ir.variable_right
-            for sender_side, other in ((left, right), (right, left)):
-                src = _normalize_sender(_sender_source_of(sender_side, function, taint))
-                if src is None:
-                    continue
-                auth = _state_address_from_value(other, function)
-                if auth is None:
-                    continue
-                add(AuthAtom(node, _kind_for_compare(src), auth, src))
         if isinstance(ir, Index) and ir.lvalue is not None:
             mapped = _map_bool_root(ir.lvalue, function, taint)
             if mapped is not None and bool_needed_true(node, ir.lvalue) is True:
@@ -342,11 +420,21 @@ def _atoms_in_node(node: Node, function: Function, taint: dict[Variable, str]) -
     return atoms
 
 
+def _guards_placeholder(node: Node) -> bool:
+    """Modifier `if (cond) _;` — the body runs only inside the taken arm (silent auth)."""
+    owner = node.function
+    if owner is None or not is_modifier(owner):
+        return False
+    return any(son.type == NodeType.PLACEHOLDER for son in guarded_nodes(node))
+
+
 def _is_end_auth_node(node: Node) -> bool:
     if is_require_assert_node(node):
         return True
     if is_if_node(node):
         if branch_reverts(node):
+            return True
+        if _guards_placeholder(node):
             return True
     return False
 
@@ -601,3 +689,85 @@ def role_writers(contract: Any, var: StateVariable) -> list[Function]:
         if var in fn.state_variables_written or var in fn.all_state_variables_written():
             writers.append(fn)
     return writers
+
+
+def node_silently_gated_by_state(node: Node) -> bool:
+    """`node` runs only inside an `if` arm whose condition reads state or `msg.value`.
+
+    The arm is a silent skip (no revert): `if (hash == 0x0 || msg.value > 1 ether) hash = h;`
+    is the HoneyBadger writer shape — the depositor's call succeeds but changes nothing.
+    """
+    function = node.function
+    if function is None:
+        return False
+    for cand in function.nodes:
+        if not is_if_node(cand) or cand.type != NodeType.IF:
+            continue
+        if node not in guarded_nodes(cand) and node not in else_guarded_nodes(cand):
+            continue
+        if branch_reverts(cand):
+            continue
+        if cand.state_variables_read:
+            return True
+        if any(is_msg_value(val) for val in values_feeding_condition(cand)):
+            return True
+    return False
+
+
+def depositor_locked(contract: Any, var: StateVariable) -> bool:
+    """Every post-constructor write of `var` is privileged or silently state-gated.
+
+    A state var the payout guard compares against is "practically unwritable" by a
+    depositor when each externally reachable writer either carries an auth atom or
+    performs the write only inside a non-reverting `if` arm that reads state /
+    `msg.value` (`SetPass`, `StartRoulette` shapes). Constants and vars with no
+    post-constructor writer are trivially locked.
+    """
+    if var.is_constant or var.is_immutable:
+        return True
+    for fn in unique_functions(contract):
+        if is_ctor(fn) or is_modifier(fn) or not is_externally_callable(fn):
+            continue
+        sites = [node for node, written in _write_sites(fn) if written is var]
+        if not sites:
+            continue
+        if is_privileged(fn):
+            continue
+        for node in sites:
+            if _node_in_privileged_branch(fn, node):
+                continue
+            owner = node.function
+            if owner is not None and owner is not fn and _node_in_privileged_branch(owner, node):
+                continue
+            if node_silently_gated_by_state(node):
+                continue
+            return False
+    return True
+
+
+def bait_writer_exists(contract: Any, var: StateVariable) -> bool:
+    """A non-privileged **payable** function writes `var` only inside a silent state-gated
+    arm: "pay to become the receiver" — the deposit succeeds, the write silently does not."""
+    for fn in unique_functions(contract):
+        if is_ctor(fn) or is_modifier(fn) or not is_externally_callable(fn):
+            continue
+        if not fn.payable or is_privileged(fn):
+            continue
+        for node, written in _write_sites(fn):
+            if written is var and node_silently_gated_by_state(node):
+                return True
+    return False
+
+
+def shadowed_auth_vars(contract: Any) -> list[tuple[StateVariable, StateVariable]]:
+    """(auth_var, shadow) pairs: a state var of the same name declared elsewhere in the
+    inheritance chain (HoneyBadger inheritance disorder — the derived `owner` never
+    reaches the base modifier). Structural name collision, not a word list."""
+    ordered = list(getattr(contract, "state_variables_ordered", None) or contract.state_variables)
+    out: list[tuple[StateVariable, StateVariable]] = []
+    for auth in sorted_vars(auth_vars(contract)):
+        for other in ordered:
+            if other is auth or other.name != auth.name:
+                continue
+            out.append((auth, other))
+    return out
