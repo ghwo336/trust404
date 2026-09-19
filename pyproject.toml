@@ -14,6 +14,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+detector = ["slither-analyzer==0.11.6", "solc-select>=1.0"]
 
 [project.scripts]
 bench = "baybench.cli:main"
@@ -26,3 +27,4 @@ baybench = ["schema/*.json", "catalog.yaml", "tools.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]

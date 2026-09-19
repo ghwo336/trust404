@@ -9,3 +9,6 @@ tools:
   - name: probe_network
     image: baybench/probe_network:latest
     cmd: ".venv/bin/python tools/probe_network/tool.py {input} {output}/results.json"
+  - name: detector
+    image: trust404/detector:latest
+    cmd: ".venv/bin/python -m detector.cli {input} {output}/results.json"
