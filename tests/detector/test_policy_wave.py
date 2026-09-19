@@ -90,7 +90,8 @@ def test_ownable2step_no_d_family_high() -> None:
         if f.get("severity") == "HIGH" and str(f.get("rule_id", "")).startswith("OWN_")
     ]
     assert d_high == [], d_high
-    assert result["verdict"] in {"Benign", "Uncertain"}
+    # two-step handoff is DROP (stronger INFO); file is Benign under decisive mode
+    assert result["verdict"] == "Benign", result
 
 
 def test_trading_switch_owner_bypass_malicious() -> None:

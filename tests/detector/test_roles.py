@@ -51,7 +51,7 @@ def test_managed_role(slither_for) -> None:
 
 def test_library_role(slither_for) -> None:
     ben = tier1_ctx(slither_for, "PRIV_ROLE", "ben")
-    assert roles.library_role(ben, fn(ben, "setBlacklist")) is True
+    assert roles.library_role(ben, fn(ben, "setMetadataURI")) is True
     mal = tier1_ctx(slither_for, "PRIV_ROLE", "mal")
     assert roles.library_role(mal, fn(mal, "setBlacklist")) is False
 

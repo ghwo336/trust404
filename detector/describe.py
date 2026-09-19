@@ -6,6 +6,8 @@ baybench/catalog.yaml (tests assert identity); summary.md and README.md render f
 
 from __future__ import annotations
 
+from detector.model import Finding
+
 FAMILY_TITLES: dict[str, str] = {
     "A": "Exit gating",
     "B": "Balance tamper",
@@ -123,8 +125,8 @@ RULE_EXPLANATIONS: dict[str, str] = {
         "rescue of foreign tokens only is downgraded to informational."
     ),
     "SLITHER_HIGH_OVERLAY": (
-        "One of Slither's built-in High-impact detectors fired; exploit-shape checks lift "
-        "Benign to Uncertain, all others are evidence only."
+        "One of Slither's built-in High-impact detectors fired; exploit-shape checks count "
+        "as HIGH, all others are evidence only."
     ),
     "OWN_HIDDEN_ROLE": (
         "An address or map that gates privileged functions is not readable through any public "
@@ -191,11 +193,30 @@ DISCRIMINATOR_TITLES: dict[str, str] = {
 
 # Fixed reason codes emitted by policy.py / engine.py and their judge-facing sentence.
 REASON_SENTENCES: dict[str, str] = {
-    "med_findings": "privileged controls present but disclosed/bounded",
     "external_dependency": "transfer behaviour depends on a contract at a settable address",
     "compile_failed": "source did not compile with any pinned solc — not analysed",
     "timeout": "analysis exceeded the per-file time limit — not analysed",
     "analysis_error": "analysis raised an internal error — not analysed",
+    "budget_exhausted": "global time budget exhausted before this file was analysed",
+}
+
+GOVERNANCE_NOTE: dict[str, str] = {
+    "managed_role": "the power sits under a role-administered account (governance, not a code bound)",
+    "issuer_token": "issuer-controlled token; centralization, not a bound",
+    "role_separated_cap": "the cap is settable by another role, so it is not code-enforced",
+}
+
+BOUNDING_NOTE: dict[str, str] = {
+    "constant_cap": "cap is a constant/immutable",
+    "fee_cap": "fee is capped by a constant ratio in code",
+    "constant_floor": "every writer keeps the limit above a constant floor",
+    "bounded_window": "gate only applies inside a constant time window",
+    "ungate_exists": "restriction is symmetric — an un-gate exists and the privileged path is not exempt",
+    "no_custody": "contract holds no user ETH",
+    "foreign_only": "only foreign tokens can be swept",
+    "two_step_handoff": "two-step ownership handoff",
+    "one_shot_initializer": "one-shot initializer",
+    "representation_switch": "balance re-denomination",
 }
 
 BENIGN_NO_FINDINGS = "no privileged control over user funds found"
@@ -217,3 +238,11 @@ def family_title(family: str) -> str:
 
 def discriminator_title(name: str) -> str:
     return DISCRIMINATOR_TITLES.get(name, name)
+
+
+def governance_notes(finding: Finding) -> list[str]:
+    return [GOVERNANCE_NOTE[name] for name in finding.discriminators if name in GOVERNANCE_NOTE]
+
+
+def bounding_notes(finding: Finding) -> list[str]:
+    return [BOUNDING_NOTE[name] for name in finding.discriminators if name in BOUNDING_NOTE]

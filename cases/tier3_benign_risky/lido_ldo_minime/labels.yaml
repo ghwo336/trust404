@@ -1,8 +1,8 @@
 id: tier3/lido_ldo_minime
 file: MiniMeToken.sol
-preferred_verdict: Benign
-accepted_verdicts: [Benign, Uncertain]
-expected_families: []
+preferred_verdict: Malicious
+accepted_verdicts: [Malicious, Uncertain]
+expected_families: [B, E]
 source: https://sourcify.dev/server/v2/contract/1/0x5A98FcBEA516Cf06857215779Fd812CA3beF1B32
 solc: "0.4.26"
-notes: Verified LDO MiniMeToken (mainnet 0x5A98FcBEA516Cf06857215779Fd812CA3beF1B32). transfersEnabled + controller-only enableTransfers. Deployed with solc 0.4.24; fixture compiles with 0.4.26.
+notes: "Verified LDO MiniMeToken (mainnet 0x5A98FcBEA516Cf06857215779Fd812CA3beF1B32). transfersEnabled + controller-only enableTransfers. Deployed with solc 0.4.24; fixture compiles with 0.4.26. Phase 5 (2026-09-20): controller-only generateTokens is uncapped (rule 2) → preferred Malicious; doTransfer calls the settable controller so Uncertain(external_dependency) is the sanctioned abstain and is accepted; Benign is not."

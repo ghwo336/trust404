@@ -198,6 +198,7 @@ def test_struct_selfdestruct_ben_silent(slither_for) -> None:
 
 
 def test_struct_proxy_eoa_admin_mal_fires_med(slither_for) -> None:
+    """Catalog base stays MED; finalize lifts DECISIVE_MED to HIGH (spec §policy.py)."""
     ctx = tier1_ctx(slither_for, "STRUCT_PROXY_EOA_ADMIN", "mal")
     _assert_mal(struct_proxy_eoa_admin(ctx), "STRUCT_PROXY_EOA_ADMIN", "MED")
 

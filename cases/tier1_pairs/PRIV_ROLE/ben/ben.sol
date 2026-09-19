@@ -3,9 +3,9 @@ pragma solidity 0.8.20;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
 
-/// Documented OpenZeppelin AccessControl: DEFAULT_ADMIN_ROLE gates setBlacklist.
+/// Documented OpenZeppelin AccessControl: DEFAULT_ADMIN_ROLE gates only setMetadataURI (off the transfer path).
 contract DocumentedRoleToken is AccessControl {
-    mapping(address => bool) public blacklist;
+    string public metadataURI;
     mapping(address => uint256) public balanceOf;
 
     constructor() {
@@ -13,12 +13,11 @@ contract DocumentedRoleToken is AccessControl {
         balanceOf[msg.sender] = 1e24;
     }
 
-    function setBlacklist(address account, bool blocked) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        blacklist[account] = blocked;
+    function setMetadataURI(string calldata uri) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        metadataURI = uri;
     }
 
     function transfer(address to, uint256 amount) external returns (bool) {
-        require(!blacklist[msg.sender] && !blacklist[to]);
         balanceOf[msg.sender] -= amount;
         balanceOf[to] += amount;
         return true;

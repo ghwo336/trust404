@@ -141,7 +141,6 @@ def _analyze_in_process(path: str, rel: str, input_root: str | None = None) -> d
         logger.info("compile note for %s: %s", rel, compiled.note)
     slither = compiled.slither
     findings: list[Finding] = []
-    shape_flag = False
     # Provenance root is the CLI input directory; a ladder temp copy sits next to the source.
     # Slither filenames point at the file it parsed (temp copy when the ladder rewrote the source).
     for contract in target_contracts(slither, compiled.source_path):
@@ -149,11 +148,9 @@ def _analyze_in_process(path: str, rel: str, input_root: str | None = None) -> d
         raw: list[Finding] = []
         for rule in RULES:
             raw.extend(rule(ctx))
-        adjusted, shape_applied = finalize(raw)
-        findings.extend(adjusted)
-        shape_flag = shape_flag or shape_applied
+        findings.extend(finalize(raw))
     findings = _dedupe_findings(findings)
-    verdict, reason = decide(findings, suppress_escalation=shape_flag)
+    verdict, reason = decide(findings)
     payload = FileResult(
         file=rel,
         verdict=verdict,

@@ -97,3 +97,37 @@ def test_write_report_creates_md_and_json(tmp_cases: Path, tmp_path: Path) -> No
     loaded = json.loads(json_path.read_text(encoding="utf-8"))
     assert loaded["tool"] == "kw"
     assert "# BAYBENCH report" in md_path.read_text(encoding="utf-8")
+    assert loaded["scoring"]["tier0_exact"] == {"k": 0, "n": 0}
+
+
+def _report_with_tier0_exact(k: int, n: int) -> dict:
+    return {
+        "tool": "kw",
+        "n_cases": 3,
+        "scoring": {
+            "weighted_score": 0.5,
+            "overall": {},
+            "tier0_exact": {"k": k, "n": n},
+            "per_tier": {},
+            "per_family": {},
+            "extra_results": [],
+        },
+        "coverage": {},
+        "determinism": {},
+        "runtime": {},
+    }
+
+
+def test_render_markdown_tier0_exact_k_n() -> None:
+    """BB-12: report.md Summary carries a tier0_exact k/n line right after weighted_score."""
+    md = render_markdown(_report_with_tier0_exact(1, 2))
+    assert "| tier0_exact | 1/2 |" in md
+    weighted_idx = md.index("| weighted_score |")
+    exact_idx = md.index("| tier0_exact | 1/2 |")
+    assert exact_idx > weighted_idx
+
+
+def test_render_markdown_tier0_exact_dash_when_empty() -> None:
+    """BB-12: when the run has no Tier 0 cases, the gate line renders '-'."""
+    md = render_markdown(_report_with_tier0_exact(0, 0))
+    assert "| tier0_exact | - |" in md

@@ -5,7 +5,7 @@ from __future__ import annotations
 import yaml
 
 from detector.engine import _analyze_in_process, target_contracts
-from detector.rules.overlay import RULES, slither_high_overlay
+from detector.rules.overlay import EXPLOIT_SHAPE_CHECKS, RULES, slither_high_overlay
 from tests.detector.analysis_util import make_ctx, tier1_ctx
 from tests.detector.conftest import TIER1, TIER3, tier1_sol
 
@@ -31,6 +31,21 @@ def _labels(rule_id: str, twin: str) -> dict:
 
 def test_overlay_registry_exports_one_rule() -> None:
     assert RULES == [slither_high_overlay]
+
+
+def test_exploit_shape_checks_match_spec() -> None:
+    """spec §policy.py counting finding: exploit-shape set (no loop/rtlo/protected-vars)."""
+    assert EXPLOIT_SHAPE_CHECKS == frozenset(
+        {
+            "reentrancy-eth",
+            "arbitrary-send-eth",
+            "arbitrary-send-erc20",
+            "arbitrary-send-erc20-permit",
+            "suicidal",
+            "controlled-delegatecall",
+            "unprotected-upgrade",
+        }
+    )
 
 
 def test_slither_high_overlay_mal_fires_info_on_withdraw(slither_for) -> None:
@@ -97,8 +112,9 @@ def test_engine_verdicts_for_overlay_pairs() -> None:
         str(tier1_sol("SLITHER_HIGH_OVERLAY", "mal")),
         "SLITHER_HIGH_OVERLAY/mal/mal.sol",
     )
-    assert mal["verdict"] == "Uncertain", mal
-    assert mal.get("reason") == "slither_high"
+    # spec §policy.py: exploit-shape overlay without evidence_only is a counting finding
+    assert mal["verdict"] == "Malicious", mal
+    assert mal.get("reason", "") == ""
 
 
 def test_overlay_reasoning_has_no_path(slither_for) -> None:

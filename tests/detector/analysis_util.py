@@ -81,5 +81,4 @@ def run_and_finalize(ctx: ContractContext, rule_fns) -> list[Finding]:
     raw: list[Finding] = []
     for rule in rule_fns:
         raw.extend(rule(ctx))
-    adjusted, _shape = finalize(raw)
-    return list(adjusted)
+    return list(finalize(raw))

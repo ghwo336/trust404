@@ -99,6 +99,7 @@ def test_drain_approval_pull_silent_on_oz_permit(slither_for) -> None:
 
 
 def test_honeypot_legacy_mal_fires_med(slither_for) -> None:
+    """Catalog base stays MED; finalize lifts DECISIVE_MED to HIGH (spec §policy.py)."""
     ctx = tier1_ctx(slither_for, "HONEYPOT_LEGACY", "mal")
     _assert_mal(honeypot_legacy(ctx), "HONEYPOT_LEGACY", "MED")
 
@@ -109,6 +110,7 @@ def test_honeypot_legacy_ben_silent(slither_for) -> None:
 
 
 def test_ponzi_shape_mal_fires_med(slither_for) -> None:
+    """Catalog base stays MED; finalize lifts DECISIVE_MED to HIGH (spec §policy.py)."""
     ctx = tier1_ctx(slither_for, "PONZI_SHAPE", "mal")
     _assert_mal(ponzi_shape(ctx), "PONZI_SHAPE", "MED")
 

@@ -95,6 +95,7 @@ def test_family_c_registry_exports_four_rules() -> None:
 
 
 def test_fee_addr_mutable_mal_fires_med_at_writer(slither_for) -> None:
+    """Catalog base stays MED; finalize forces INFO (spec §policy.py)."""
     ctx = tier1_ctx(slither_for, "FEE_ADDR_MUTABLE", "mal")
     _assert_mal(fee_addr_mutable(ctx), "FEE_ADDR_MUTABLE", "MED")
 

@@ -1,8 +1,8 @@
 id: tier3/bancor_smarttoken
 file: SmartToken.sol
-preferred_verdict: Benign
-accepted_verdicts: [Benign, Uncertain]
-expected_families: []
+preferred_verdict: Malicious
+accepted_verdicts: [Malicious, Benign]
+expected_families: [B, C]
 source: https://sourcify.dev/server/v2/contract/1/0x1F573D6Fb3F13d689FF844B4cE37794d79a7FF1C
 solc: "0.4.26"
-notes: Verified BNT SmartToken (mainnet 0x1F573D6Fb3F13d689FF844B4cE37794d79a7FF1C) with owner disableTransfers. Deployed with solc 0.4.11; fixture compiles with 0.4.26.
+notes: "Verified BNT SmartToken (mainnet 0x1F573D6Fb3F13d689FF844B4cE37794d79a7FF1C) with owner disableTransfers. Deployed with solc 0.4.11; fixture compiles with 0.4.26. Phase 5 (2026-09-20): destroy (burn-other under owner) and issue (uncapped mint) have no code-enforced cap (organizers' rule 2) → preferred Malicious; Benign accepted as the defensible institutional reading; Uncertain is not accepted (abstain)."

@@ -1,9 +1,9 @@
 id: tier1/HONEYPOT_LEGACY/mal
 file: mal.sol
-preferred_verdict: Uncertain
-accepted_verdicts: [Uncertain, Malicious]
+preferred_verdict: Malicious
+accepted_verdicts: [Malicious]
 expected_families: [F]
 expected_rule_ids: [HONEYPOT_LEGACY]
 expected_functions: [withdraw]
-source: HoneyBadger (Torres et al., USENIX Security 2019); spec §8 Table 5 / §7 HONEYPOT_LEGACY (MED)
+source: HoneyBadger (Torres et al., USENIX Security 2019); spec §8 Table 5 / §7 HONEYPOT_LEGACY (MED-base, decisive → Malicious under Phase 5 doctrine)
 solc: "0.8.20"

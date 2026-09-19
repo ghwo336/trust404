@@ -14,16 +14,13 @@ from dataclasses import dataclass
 from detector import TOOL_NAME, TOOL_VERSION, describe
 from detector.model import FileResult, Finding, canonical_findings
 from detector.rules.base import CATALOG
-from detector.rules.overlay import EXPLOIT_SHAPE_CHECKS
 
 SEVERITY_ORDER: tuple[str, ...] = ("HIGH", "MED", "INFO")
 INFO_COLLAPSE_THRESHOLD = 6
 EMPTY_CELL = "—"
 FOOTER = "Analysis is static (Slither IR), name-agnostic and offline; verdict rules: see README."
 
-_ESCALATED_PREFIX = "escalated:"
 _GATED_BY_RE = re.compile(r"\bgated by (\S+)")
-_COUNT_WORDS = {2: "two", 3: "three", 4: "four", 5: "five"}
 
 
 # --- small pure helpers ---------------------------------------------------------------------
@@ -116,50 +113,9 @@ def _distinct_titles(findings: Iterable[Finding]) -> str:
     return ", ".join(seen)
 
 
-def _overlay_check(finding: Finding) -> str:
-    return finding.reasoning.split(":", 1)[0].strip()
-
-
-def _overlay_checks(findings: Sequence[Finding]) -> list[str]:
-    overlay = [
-        f for f in findings if f.rule_id == "SLITHER_HIGH_OVERLAY" and f.reasoning.strip()
-    ]
-    all_checks = {_overlay_check(f) for f in overlay}
-    # Findings rebuilt from results.json carry no discriminators, so also filter by the check
-    # set that policy treats as exploit-shaped; fall back to everything if nothing matches.
-    lifting = {
-        _overlay_check(f)
-        for f in overlay
-        if "evidence_only" not in f.discriminators and _overlay_check(f) in EXPLOIT_SHAPE_CHECKS
-    }
-    return sorted(lifting or all_checks)
-
-
-def _count_word(n: int) -> str:
-    return _COUNT_WORDS.get(n, str(n))
-
-
 def explain_verdict(verdict: str, reason: str, findings: Sequence[Finding]) -> str:
     """One human sentence for (verdict, reason, findings); the `why` column of the overview."""
     ordered = canonical_findings(findings)
-    if reason.startswith(_ESCALATED_PREFIX):
-        ids = [item for item in reason[len(_ESCALATED_PREFIX) :].split(",") if item]
-        titles = ", ".join(describe.rule_title(item) for item in ids)
-        return (
-            f"{_count_word(len(ids))} independent privileged controls from different "
-            f"families ({titles})"
-        )
-    if reason == "med_findings":
-        base = describe.REASON_SENTENCES[reason]
-        titles = _distinct_titles(f for f in ordered if f.severity == "MED")
-        return f"{base} ({titles})" if titles else base
-    if reason == "slither_high":
-        checks = _overlay_checks(ordered)
-        return (
-            f"Slither exploit-shape finding ({', '.join(checks)})"
-            if checks
-            else "Slither exploit-shape finding"
-        )
     if reason in describe.REASON_SENTENCES:
         return describe.REASON_SENTENCES[reason]
     if reason:
@@ -208,11 +164,11 @@ def _legend(entries: Sequence[_Entry]) -> list[str]:
         verdict_counts[_verdict_rank(entry.result.verdict)] += 1
     malicious, uncertain, benign = verdict_counts
     return [
-        "- Verdicts: **Malicious** = concealed or unbounded control over user funds found · "
-        "**Uncertain** = privileged or risky controls found but disclosed, bounded or externally "
-        "dependent (manual review) · **Benign** = no privileged control over user funds found.",
-        "- Severities: **HIGH** drives Malicious · **MED** drives Uncertain / escalation · "
-        "**INFO** is evidence only.",
+        "- Verdicts: **Malicious** = a counting (HIGH) finding over user funds or an exploit-shape "
+        "check · **Uncertain** = compile failure, timeout, analysis error, or external "
+        "dependency only · **Benign** = no counting finding.",
+        "- Severities: **HIGH** drives Malicious · **MED** = external dependency → Uncertain · "
+        "**INFO** is evidence only, including bounded controls and governance notes.",
         f"- Files: {len(entries)} · Malicious {malicious} · Uncertain {uncertain} · Benign {benign}.",
     ]
 

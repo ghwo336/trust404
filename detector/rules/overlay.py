@@ -28,11 +28,7 @@ EXPLOIT_SHAPE_CHECKS = frozenset(
         "arbitrary-send-erc20-permit",
         "suicidal",
         "controlled-delegatecall",
-        "delegatecall-loop",
-        "msg-value-loop",
         "unprotected-upgrade",
-        "protected-vars",
-        "rtlo",
     }
 )
 

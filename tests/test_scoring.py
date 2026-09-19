@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 
 from baybench.catalog import load_catalog
-from baybench.models import load_cases, parse_result
-from baybench.scoring import percentile, score_run, verdict_score
+from baybench.models import Case, load_cases, parse_result
+from baybench.scoring import TIER_WEIGHTS, percentile, score_run, verdict_score
 
 MAL_FILE = "tier1/EXIT_ADDR_GATE/mal/mal.sol"
 BEN_FILE = "tier1/EXIT_ADDR_GATE/ben/ben.sol"
@@ -103,7 +103,11 @@ def test_score_run_happy_path(tmp_cases: Path) -> None:
     assert out["per_family"]["A"]["n_cases"] == 1
     assert out["per_family"]["G"]["n_cases"] == 0
     assert out["extra_results"] == ["tier9/nothing.sol"]
+    # BB-12 (2026-09-20): tier0_judge weight is 1.0; this fixture has no Tier 0
+    # so the weighted mean is still (tier1=2.0 * 1.0 + tier3=2.0 * 0.75) / 4.0.
+    assert TIER_WEIGHTS["tier0_judge"] == 1.0
     assert out["weighted_score"] == round((2.0 * 1.0 + 2.0 * 0.75) / 4.0, 4)
+    assert out["tier0_exact"] == {"k": 0, "n": 0}
 
 
 def test_missing_result(tmp_cases: Path) -> None:
@@ -159,3 +163,50 @@ def test_timings_only_on_overall(tmp_cases: Path) -> None:
     assert out["overall"]["runtime_p95"] == 3.0
     for tier_agg in out["per_tier"].values():
         assert tier_agg["runtime_p50"] is None
+
+
+def _synthetic_case(
+    *,
+    case_id: str,
+    tier: str,
+    preferred: str,
+    accepted: tuple[str, ...] | None = None,
+    file: str = "x.sol",
+) -> Case:
+    return Case(
+        id=case_id,
+        tier=tier,
+        dir=Path("."),
+        file=file,
+        preferred_verdict=preferred,
+        accepted_verdicts=accepted if accepted is not None else (preferred,),
+    )
+
+
+def test_tier0_exact_k_n_and_weight_equals_tier2() -> None:
+    """BB-12: TIER_WEIGHTS['tier0_judge'] == 1.0 (equal to tier2); score_run emits tier0_exact k/n."""
+    assert TIER_WEIGHTS["tier0_judge"] == 1.0
+    assert TIER_WEIGHTS["tier0_judge"] == TIER_WEIGHTS["tier2_realworld"]
+
+    cases = [
+        _synthetic_case(case_id="tier0/exact", tier="tier0_judge", preferred="Benign"),
+        _synthetic_case(case_id="tier0/miss", tier="tier0_judge", preferred="Malicious"),
+        _synthetic_case(case_id="tier1/keep", tier="tier1_pairs", preferred="Malicious"),
+    ]
+    tool = parse_result(
+        {
+            "tool": {"name": "kw", "version": "0.1"},
+            "results": [
+                {"file": "tier0/exact/x.sol", "verdict": "Benign"},
+                {"file": "tier0/miss/x.sol", "verdict": "Benign"},
+                {"file": "tier1/keep/x.sol", "verdict": "Malicious"},
+            ],
+        }
+    )
+    out = score_run(cases, tool, load_catalog())
+    assert out["tier0_exact"] == {"k": 1, "n": 2}
+    exact_rows = [row for row in out["cases"] if row["tier"] == "tier0_judge"]
+    assert sum(1 for row in exact_rows if row["exact"]) == 1
+    # equal-weight with tier2 is already asserted on TIER_WEIGHTS; the run has
+    # tier0 mean 0.5 and tier1 mean 1.0 → (1.0*0.5 + 2.0*1.0) / 3.0
+    assert out["weighted_score"] == round((1.0 * 0.5 + 2.0 * 1.0) / 3.0, 4)

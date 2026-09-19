@@ -48,6 +48,12 @@ def _cell(value) -> str:
     return str(value)
 
 
+def _tier0_exact_cell(value) -> str:
+    if not value or not value.get("n"):
+        return "-"
+    return f"{value['k']}/{value['n']}"
+
+
 def _join(values: Sequence[str]) -> str:
     return ", ".join(values) if values else "-"
 
@@ -78,6 +84,7 @@ def render_markdown(rep: dict) -> str:
         "| metric | value |",
         "| --- | --- |",
         f"| weighted_score | {_cell(scoring.get('weighted_score'))} |",
+        f"| tier0_exact | {_tier0_exact_cell(scoring.get('tier0_exact'))} |",
         f"| mean_verdict_score | {_cell(overall.get('mean_verdict_score'))} |",
         f"| n_cases | {_cell(rep.get('n_cases'))} |",
         f"| determinism | {_determinism_label(determinism.get('deterministic'))} |",

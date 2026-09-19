@@ -140,7 +140,7 @@ tools:
 - **BB-4** Coverage lists families and rule IDs with zero cases, plus per-tool gap list.
 - **BB-5** Determinism double-run pass/fail per tool.
 - **BB-6** Tier 1: every rule ID in the catalog has ≥1 malicious and ≥1 benign twin; `bench validate` compiles all.
-- **BB-7** Tier 3: ≥8 risky fixtures; the bounded class carries `accepted: [Benign, Uncertain]`, the governance-only class `accepted: [Malicious, Benign]` (amended 2026-09-20; ≥5 bounded fixtures remain so the false-MALICIOUS brake keeps teeth).
+- **BB-7** Tier 3: ≥8 risky fixtures; the bounded class carries `accepted: [Benign, Uncertain]`, the governance-only class `preferred: Malicious` with `accepted: [Malicious, Benign]` (`usdc`, `bancor`) or `[Malicious, Uncertain]` (`lido`, external-gate abstain) as listed under Corpus tiers (amended 2026-09-20; ≥5 bounded fixtures remain so the false-MALICIOUS brake keeps teeth).
 - **BB-12** (2026-09-20) `TIER_WEIGHTS["tier0_judge"] == 1.0`; `report.md`/`report.json` carry `tier0_exact: k/n` (files whose verdict equals `preferred_verdict`) as its own line under the summary.
 - **BB-8** Tier 0: ingest command + labels scaffold; populated when Discord samples arrive.
 - **BB-9** Tier 2: ≥100 real malicious sources ingested with paper-derived family labels.

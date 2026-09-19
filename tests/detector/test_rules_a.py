@@ -138,11 +138,16 @@ def test_tier3_no_high(folder: str) -> None:
     highs = [f for f in result.get("findings") or [] if f.get("severity") == "HIGH"]
     other = [f for f in highs if f.get("rule_id") not in OUR_RULES]
     ours = [f for f in highs if f.get("rule_id") in OUR_RULES]
-    if other and not ours:
-        pytest.xfail(
-            f"other-family HIGH on tier3/{folder}: "
-            f"{[(f.get('rule_id'), f.get('function')) for f in other]}"
-        )
-    assert ours == [], [(f.get("rule_id"), f.get("function"), f.get("severity")) for f in ours]
+    preferred = label["preferred_verdict"]
     accepted = list(label["accepted_verdicts"])
+    # DT-5: bounded fixtures (preferred Benign) must have zero HIGH. Governance-only
+    # fixtures are preferred Malicious and may carry counting findings.
+    if preferred == "Benign":
+        if other and not ours:
+            pytest.xfail(
+                f"other-family HIGH on tier3/{folder}: "
+                f"{[(f.get('rule_id'), f.get('function')) for f in other]}"
+            )
+        assert ours == [], [(f.get("rule_id"), f.get("function"), f.get("severity")) for f in ours]
+        assert result["verdict"] == "Benign", result
     assert result["verdict"] in accepted, result

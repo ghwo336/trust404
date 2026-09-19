@@ -1,9 +1,9 @@
 id: tier1/PONZI_SHAPE/mal
 file: mal.sol
-preferred_verdict: Uncertain
-accepted_verdicts: [Uncertain, Malicious]
+preferred_verdict: Malicious
+accepted_verdicts: [Malicious]
 expected_families: [G]
 expected_rule_ids: [PONZI_SHAPE]
 expected_functions: [payout]
-source: spec §7 PONZI_SHAPE (MED, family G) — payout to stored depositors funded only by msg.value
+source: spec §7 PONZI_SHAPE (MED-base, decisive → Malicious under Phase 5 doctrine) — payout to stored depositors funded only by msg.value
 solc: "0.8.20"

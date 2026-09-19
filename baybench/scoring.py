@@ -7,7 +7,7 @@ from typing import Sequence
 from .models import Case, FileResult, ToolResult
 
 TIER_WEIGHTS = {
-    "tier0_judge": 4.0,
+    "tier0_judge": 1.0,
     "tier1_pairs": 2.0,
     "tier2_realworld": 1.0,
     "tier3_benign_risky": 2.0,
@@ -82,6 +82,7 @@ def case_row(case: Case, fr: FileResult | None) -> dict:
         "high_fp": high_fp,
         "fired_rule_ids": fired_rule_ids,
         "fired_families": fired_families,
+        "exact": actual is not None and actual == case.preferred_verdict,
     }
 
 
@@ -131,6 +132,11 @@ def score_run(
     }
     staged = {case.staged_file for case in cases}
     extra_results = sorted(key for key in by_file if key not in staged)
+    tier0_rows = [row for row in rows if row["tier"] == "tier0_judge"]
+    tier0_exact = {
+        "k": sum(1 for row in tier0_rows if row["exact"]),
+        "n": len(tier0_rows),
+    }
     if per_tier:
         weight_sum = sum(TIER_WEIGHTS.get(tier, 1.0) for tier in per_tier)
         weighted_score = (
@@ -148,6 +154,7 @@ def score_run(
         "n_cases": len(cases),
         "overall": aggregate(rows, timings),
         "weighted_score": round(weighted_score, 4),
+        "tier0_exact": tier0_exact,
         "per_tier": per_tier,
         "per_family": per_family,
         "extra_results": extra_results,

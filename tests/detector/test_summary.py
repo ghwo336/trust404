@@ -62,13 +62,12 @@ def _sample_results() -> list[FileResult]:
         ),
         FileResult(
             file="usdc.sol",
-            verdict="Uncertain",
-            reason="med_findings",
+            verdict="Malicious",
             findings=(
                 _finding(
                     rule_id="BAL_PRIV_MINT",
                     family="B",
-                    severity="MED",
+                    severity="HIGH",
                     contract="FiatTokenV1",
                     function="mint",
                     lines=tuple(range(741, 758)),
@@ -76,7 +75,6 @@ def _sample_results() -> list[FileResult]:
                     discriminators=("managed_role",),
                 ),
                 _finding(
-                    severity="MED",
                     contract="FiatTokenV1",
                     function="notBlacklisted",
                     lines=(518, 519, 520, 521),
@@ -126,23 +124,7 @@ def test_compress_lines(lines: tuple[int, ...], expected: str) -> None:
 def test_explain_verdict_sentences() -> None:
     high = _finding()
     hidden = _finding(rule_id="OWN_HIDDEN_ROLE", family="D")
-    med_mint = _finding(rule_id="BAL_PRIV_MINT", family="B", severity="MED")
     info = _priv_role("setBots", "owner")
-    overlay_exploit = _finding(
-        rule_id="SLITHER_HIGH_OVERLAY",
-        family="C",
-        severity="INFO",
-        base_severity="INFO",
-        reasoning="arbitrary-send-eth: Vault.sweep() sends eth to arbitrary user",
-    )
-    overlay_evidence = _finding(
-        rule_id="SLITHER_HIGH_OVERLAY",
-        family="C",
-        severity="INFO",
-        base_severity="INFO",
-        reasoning="unchecked-transfer: ignores return value",
-        discriminators=("evidence_only",),
-    )
 
     assert explain_verdict("Malicious", "", [high, high, info]) == (
         "HIGH: Settable address gate on transfers"
@@ -151,28 +133,23 @@ def test_explain_verdict_sentences() -> None:
     assert explain_verdict("Malicious", "", [hidden, high]) == (
         "HIGH: Settable address gate on transfers, Undisclosed privileged role"
     )
-    assert explain_verdict("Malicious", "escalated:EXIT_TIME_GATE,OWN_TX_ORIGIN", []) == (
-        "two independent privileged controls from different families "
-        "(Privileged time gate on transfers, tx.origin-based authorisation)"
+    # overlay exploit-shape is a counting finding (HIGH) under decisive mode
+    overlay_high = _finding(
+        rule_id="SLITHER_HIGH_OVERLAY",
+        family="C",
+        severity="HIGH",
+        base_severity="INFO",
+        reasoning="arbitrary-send-eth: Vault.sweep() sends eth to arbitrary user",
     )
-    assert explain_verdict("Uncertain", "med_findings", [med_mint, info]) == (
-        "privileged controls present but disclosed/bounded (Privileged mint)"
+    assert explain_verdict("Malicious", "", [overlay_high, info]) == (
+        "HIGH: Slither high-impact check"
     )
     assert explain_verdict("Uncertain", "external_dependency", []) == (
         "transfer behaviour depends on a contract at a settable address"
     )
-    assert explain_verdict("Uncertain", "slither_high", [overlay_evidence, overlay_exploit]) == (
-        "Slither exploit-shape finding (arbitrary-send-eth)"
+    assert explain_verdict("Uncertain", "budget_exhausted", []) == (
+        "global time budget exhausted before this file was analysed"
     )
-    # findings rebuilt from results.json carry no discriminators: filter by the check set
-    from_json = [
-        Finding(rule_id="SLITHER_HIGH_OVERLAY", family="C", severity="INFO", reasoning=r)
-        for r in ("unchecked-transfer: x", "reentrancy-eth: y", "arbitrary-send-eth: z")
-    ]
-    assert explain_verdict("Uncertain", "slither_high", from_json) == (
-        "Slither exploit-shape finding (arbitrary-send-eth, reentrancy-eth)"
-    )
-    assert explain_verdict("Uncertain", "slither_high", []) == "Slither exploit-shape finding"
     assert explain_verdict("Uncertain", "compile_failed", []) == (
         "source did not compile with any pinned solc — not analysed"
     )
@@ -194,13 +171,13 @@ def test_explain_verdict_sentences() -> None:
 def test_header_legend_counts_and_footer() -> None:
     text = render_summary(_sample_results(), META)
     assert text.startswith("# detector 0.1.0 — offline static analysis report\n")
-    assert "**Malicious** = concealed or unbounded control over user funds found" in text
-    assert "**Uncertain** = privileged or risky controls found but disclosed, bounded or externally dependent" in text
-    assert "**Benign** = no privileged control over user funds found" in text
+    assert "**Malicious** = a counting (HIGH) finding" in text
+    assert "**Uncertain** = compile failure, timeout, analysis error, or external dependency only" in text
+    assert "**Benign** = no counting finding" in text
     assert "**HIGH** drives Malicious" in text
-    assert "**MED** drives Uncertain / escalation" in text
-    assert "**INFO** is evidence only" in text
-    assert "Files: 5 · Malicious 2 · Uncertain 2 · Benign 1" in text
+    assert "**MED** = external dependency → Uncertain" in text
+    assert "**INFO** is evidence only, including bounded controls and governance notes" in text
+    assert "Files: 5 · Malicious 3 · Uncertain 1 · Benign 1" in text
     assert text.rstrip("\n").endswith(
         "Analysis is static (Slither IR), name-agnostic and offline; verdict rules: see README."
     )
@@ -212,33 +189,31 @@ def test_overview_table_sorted_by_verdict_then_path() -> None:
     rows = [
         "| a_hidden.sol | Malicious | HIGH: Undisclosed privileged role | 1 | 0 | 1 |",
         "| gate.sol | Malicious | HIGH: Settable address gate on transfers | 2 | 0 | 1 |",
+        "| usdc.sol | Malicious | HIGH: Privileged mint, Settable address gate on transfers | 2 | 0 | 0 |",
         "| broken.sol | Uncertain | source did not compile with any pinned solc — not analysed | 0 | 0 | 0 |",
-        "| usdc.sol | Uncertain | privileged controls present but disclosed/bounded "
-        "(Privileged mint, Settable address gate on transfers) | 0 | 2 | 0 |",
         "| z_benign.sol | Benign | no privileged control over user funds found | 0 | 0 | 0 |",
     ]
     positions = [text.index(row) for row in rows]
     assert positions == sorted(positions)
     # per-file sections follow the same order and come after the overview
-    sections = [text.index(f"### {name}") for name in ("a_hidden.sol", "gate.sol", "broken.sol", "usdc.sol", "z_benign.sol")]
+    sections = [text.index(f"### {name}") for name in ("a_hidden.sol", "gate.sol", "usdc.sol", "broken.sol", "z_benign.sol")]
     assert sections == sorted(sections)
     assert positions[-1] < sections[0]
 
 
 def test_per_file_section_groups_by_severity_with_titles_and_ranges() -> None:
     text = render_summary(_sample_results(), META)
-    section = text[text.index("### usdc.sol") : text.index("### z_benign.sol")]
-    assert "Verdict: **Uncertain** (`med_findings`) — privileged controls present but disclosed/bounded" in section
+    section = text[text.index("### usdc.sol") : text.index("### broken.sol")]
+    assert "Verdict: **Malicious** — HIGH: Privileged mint, Settable address gate on transfers" in section
     assert "| rule | title | where | lines | evidence |" in section
     assert (
-        "| BAL_PRIV_MINT | Privileged mint | FiatTokenV1.mint | 741-757 | mint increases bound balance or supply"
-        " · downgraded HIGH→MED: role is granted only by a different role |"
+        "| BAL_PRIV_MINT | Privileged mint | FiatTokenV1.mint | 741-757 | mint increases bound balance or supply |"
     ) in section
     assert "| EXIT_ADDR_GATE | Settable address gate on transfers | FiatTokenV1.notBlacklisted | 518-521 |" in section
-    assert "**HIGH**" not in section
-    assert "**MED**" in section
+    assert "**HIGH**" in section
+    assert "**MED**" not in section
 
-    gate = text[text.index("### gate.sol") : text.index("### broken.sol")]
+    gate = text[text.index("### gate.sol") : text.index("### usdc.sol")]
     assert "Verdict: **Malicious** — HIGH: Settable address gate on transfers" in gate
     assert gate.index("**HIGH**") < gate.index("**INFO**")
     assert "**MED**" not in gate
@@ -249,7 +224,7 @@ def test_per_file_section_groups_by_severity_with_titles_and_ranges() -> None:
 
 def test_zero_findings_and_not_analysed_sections() -> None:
     text = render_summary(_sample_results(), META)
-    broken = text[text.index("### broken.sol") : text.index("### usdc.sol")]
+    broken = text[text.index("### broken.sol") : text.index("### z_benign.sol")]
     assert "Verdict: **Uncertain** (`compile_failed`) — source did not compile with any pinned solc — not analysed" in broken
     assert "_no findings_" in broken
     benign = text[text.index("### z_benign.sol") :]
@@ -344,7 +319,7 @@ def test_severity_note_uses_catalog_base_when_finding_came_from_json() -> None:
         lines=(741,),
         reasoning="mint increases bound balance or supply",
     )
-    text = render_summary([FileResult(file="u.sol", verdict="Uncertain", reason="med_findings", findings=(from_json,))], META)
+    text = render_summary([FileResult(file="u.sol", verdict="Benign", findings=(from_json,))], META)
     assert "| mint increases bound balance or supply · downgraded HIGH→MED |" in text
 
 
@@ -415,6 +390,21 @@ def test_describe_covers_exactly_the_catalog() -> None:
     assert set(describe.FAMILY_TITLES) == {"A", "B", "C", "D", "E", "F", "G"}
     assert describe.discriminator_title("managed_role") != "managed_role"
     assert describe.discriminator_title("never_heard_of") == "never_heard_of"
+    assert set(describe.GOVERNANCE_NOTE) == {"managed_role", "issuer_token", "role_separated_cap"}
+    assert set(describe.BOUNDING_NOTE) >= {
+        "constant_cap",
+        "fee_cap",
+        "constant_floor",
+        "bounded_window",
+        "ungate_exists",
+        "no_custody",
+        "foreign_only",
+        "two_step_handoff",
+        "one_shot_initializer",
+        "representation_switch",
+    }
+    assert "budget_exhausted" in describe.REASON_SENTENCES
+    assert "external_dependency" in describe.REASON_SENTENCES
     for rule_id in ids:
         assert describe.rule_title(rule_id) == describe.RULE_TITLES[rule_id]
         assert describe.RULE_TITLES[rule_id].strip()
