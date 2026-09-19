@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
+import os
+import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -23,7 +27,7 @@ from detector.compile import (
     solc_binary,
 )
 from detector.engine import target_contracts
-from tests.detector.conftest import HARNESS, REPO_ROOT, TIER3
+from tests.detector.conftest import HARNESS, REPO_ROOT, TIER3, tier1_sol
 
 VENDOR_OZ = REPO_ROOT / "vendor" / "openzeppelin-contracts"
 _ERC20_VIA_OZ_PREFIX = (
@@ -97,6 +101,64 @@ def _listing(directory: Path) -> list[str]:
     return sorted(p.name for p in directory.iterdir())
 
 
+def _in_system_temp(path: Path) -> bool:
+    return path.resolve().is_relative_to(Path(tempfile.gettempdir()).resolve())
+
+
+def _detector_temp_names() -> set[str]:
+    return {
+        name
+        for name in os.listdir(tempfile.gettempdir())
+        if name.startswith("detector-")
+    }
+
+
+def _freeze_tree(root: Path) -> None:
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        for name in filenames:
+            os.chmod(os.path.join(dirpath, name), 0o444)
+        for name in dirnames:
+            os.chmod(os.path.join(dirpath, name), 0o555)
+    os.chmod(root, 0o555)
+
+
+def _thaw_tree(root: Path) -> None:
+    try:
+        os.chmod(root, 0o755)
+    except OSError:
+        pass
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        try:
+            os.chmod(dirpath, 0o755)
+        except OSError:
+            pass
+        for name in filenames:
+            try:
+                os.chmod(os.path.join(dirpath, name), 0o644)
+            except OSError:
+                pass
+
+
+@contextmanager
+def _readonly_tree(root: Path):
+    _freeze_tree(root)
+    try:
+        yield
+    finally:
+        _thaw_tree(root)
+
+
+def _mint_0819() -> str:
+    return (
+        "// SPDX-License-Identifier: MIT\n"
+        "pragma solidity 0.8.19;\n"
+        "contract T { mapping(address=>uint) b; address o; "
+        "constructor(){o=msg.sender;} "
+        "function mint(address a,uint v) external { require(msg.sender==o); b[a]+=v; } "
+        "function transfer(address t,uint v) external { b[msg.sender]-=v; b[t]+=v; } }\n"
+    )
+
+
 def test_ladder_relaxes_exact_pragma_not_installed(tmp_path: Path) -> None:
     src = tmp_path / "A.sol"
     src.write_text("pragma solidity 0.8.19;\n\ncontract A { uint256 x; function f() public { x = 1; } }\n")
@@ -110,9 +172,11 @@ def test_ladder_relaxes_exact_pragma_not_installed(tmp_path: Path) -> None:
     assert "compiled with 0.8.20" in result.note
     assert result.canonical_path == src.resolve()
     assert result.source_path != result.canonical_path
-    assert result.source_path.parent == src.resolve().parent
-    assert is_temp_copy(result.source_path)
-    # The engine must select contracts via source_path (Slither filenames point at the temp copy).
+    assert result.source_path.name == src.name
+    assert _in_system_temp(result.source_path)
+    assert not result.source_path.resolve().is_relative_to(src.resolve().parent)
+    assert not is_temp_copy(result.source_path)
+    # The engine must select contracts via source_path (Slither filenames point at the mirror).
     contracts = target_contracts(result.slither, result.source_path)
     assert [c.name for c in contracts] == ["A"]
     assert target_contracts(result.slither, result.canonical_path) == []
@@ -156,7 +220,8 @@ def test_ladder_strips_duplicate_spdx(tmp_path: Path) -> None:
     assert result.note is not None
     assert "SPDX" in result.note
     assert "compiled with 0.8.20" in result.note
-    assert is_temp_copy(result.source_path)
+    assert result.source_path != result.canonical_path
+    assert not is_temp_copy(result.source_path)
     contracts = target_contracts(result.slither, result.source_path)
     assert [c.name for c in contracts] == ["C1", "C2"]
     fn = next(f for f in contracts[1].functions_declared if f.name == "f")
@@ -262,7 +327,9 @@ def test_ladder_relax_then_spdx_is_capped_and_cleans_up(
         compile_file_ex(src)
     assert len(calls) <= MAX_SOLC_ATTEMPTS
     assert calls[0] == "H.sol"
-    assert all(is_temp_copy(p) for p in seen_targets[1:])
+    assert seen_targets[0].resolve() == src.resolve()
+    assert all(p.name == "H.sol" for p in seen_targets[1:])
+    assert all(not p.resolve().is_relative_to(src.resolve().parent) for p in seen_targets[1:])
     assert _listing(tmp_path) == before
 
 
@@ -283,6 +350,45 @@ def test_cleanup_temp_copies_removes_only_the_sibling_copy(tmp_path: Path) -> No
     assert cleanup_temp_copies(src) == [stray.resolve()]
     assert not stray.exists()
     assert other.exists() and src.exists()
+
+
+def test_cleanup_temp_copies_removes_mirror(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    src = tmp_path / "Token.sol"
+    src.write_text("pragma solidity 0.8.20; contract Token {}\n")
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    monkeypatch.setenv("DETECTOR_SCRATCH_DIR", str(scratch))
+    key = hashlib.sha1(str(src.resolve()).encode()).hexdigest()[:16]
+    mirror = scratch / key
+    (mirror / "root").mkdir(parents=True)
+    (mirror / "root" / "Token.sol").write_text("x\n", encoding="utf-8")
+    removed = cleanup_temp_copies(src)
+    assert not mirror.exists()
+    assert any(path.resolve() == mirror.resolve() for path in removed)
+
+
+def test_ladder_never_writes_read_only_input(tmp_path: Path) -> None:
+    src = tmp_path / "T.sol"
+    src.write_text(_mint_0819(), encoding="utf-8")
+    before = _listing(tmp_path)
+    with _readonly_tree(tmp_path):
+        result = compile_file_ex(src, input_root=tmp_path)
+    assert result.note is not None
+    assert "relaxed" in result.note
+    assert "0.8.19" in result.note
+    assert _in_system_temp(result.source_path)
+    assert not result.source_path.resolve().is_relative_to(tmp_path.resolve())
+    assert result.canonical_path == src.resolve()
+    assert _listing(tmp_path) == before
+
+
+def test_first_attempt_success_creates_no_mirror() -> None:
+    path = tier1_sol("BAL_PRIV_MINT", "mal")
+    before = _detector_temp_names()
+    result = compile_file_ex(path)
+    after = _detector_temp_names()
+    assert result.note is None
+    assert after - before == set()
 
 
 def test_good_files_never_trigger_the_ladder() -> None:

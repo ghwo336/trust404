@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import tempfile
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
 import detector.compile as compile_mod
@@ -43,6 +46,63 @@ def _raiser(path: str, rel: str, input_root: str | None = None) -> dict:
 
 def _listing(directory: Path) -> list[str]:
     return sorted(p.name for p in directory.iterdir())
+
+
+def _freeze_tree(root: Path) -> None:
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        for name in filenames:
+            os.chmod(os.path.join(dirpath, name), 0o444)
+        for name in dirnames:
+            os.chmod(os.path.join(dirpath, name), 0o555)
+    os.chmod(root, 0o555)
+
+
+def _thaw_tree(root: Path) -> None:
+    try:
+        os.chmod(root, 0o755)
+    except OSError:
+        pass
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        try:
+            os.chmod(dirpath, 0o755)
+        except OSError:
+            pass
+        for name in filenames:
+            try:
+                os.chmod(os.path.join(dirpath, name), 0o644)
+            except OSError:
+                pass
+
+
+@contextmanager
+def _readonly_tree(root: Path):
+    _freeze_tree(root)
+    try:
+        yield
+    finally:
+        _thaw_tree(root)
+
+
+def _listing_tree(root: Path) -> list[str]:
+    rows: list[str] = []
+    for dirpath, _dirnames, filenames in os.walk(root, followlinks=False):
+        rel_dir = os.path.relpath(dirpath, root)
+        for name in sorted(filenames):
+            rel = name if rel_dir == "." else f"{rel_dir}/{name}"
+            rows.append(rel.replace(os.sep, "/"))
+    return sorted(rows)
+
+
+_BASE_SOL = (
+    "pragma solidity ^0.8.0;\n"
+    "contract Base {\n"
+    "    mapping(address => uint) internal b;\n"
+    "    address internal o;\n"
+    "    constructor() { o = msg.sender; }\n"
+    "    function transfer(address t, uint v) external { b[msg.sender] -= v; b[t] += v; }\n"
+    "    function balanceOf(address a) external view returns (uint) { return b[a]; }\n"
+    "}\n"
+)
 
 
 def test_analyze_dir_uses_ladder_temp_path_for_targets(tmp_path, caplog) -> None:
@@ -94,6 +154,68 @@ def test_timeout_removes_leftover_temp_copy(monkeypatch, tmp_path) -> None:
     timed = analyze_file(src, "T.sol", timeout_s=2)
     assert timed == FileResult("T.sol", "Uncertain", reason="timeout")
     assert _listing(tmp_path) == ["T.sol"]
+
+
+def test_ladder_mirror_resolves_relative_import_read_only(tmp_path) -> None:
+    src_dir = tmp_path / "src"
+    lib = src_dir / "lib"
+    lib.mkdir(parents=True)
+    (lib / "Base.sol").write_text(_BASE_SOL, encoding="utf-8")
+    token = src_dir / "Token.sol"
+    token.write_text(
+        "pragma solidity 0.8.19;\n"
+        'import "./lib/Base.sol";\n'
+        "contract Token is Base {\n"
+        "    function mint(address a, uint v) external { require(msg.sender == o); b[a] += v; }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    before = _listing_tree(tmp_path)
+    with _readonly_tree(tmp_path):
+        result = analyze_file(token, "src/Token.sol", timeout_s=120, input_root=tmp_path)
+    assert result.verdict == "Malicious"
+    assert result.reason != "analysis_error"
+    assert _listing_tree(tmp_path) == before
+
+
+def test_ladder_mirror_honours_remappings_read_only(tmp_path) -> None:
+    src_dir = tmp_path / "src"
+    lib = src_dir / "lib"
+    lib.mkdir(parents=True)
+    (lib / "Base.sol").write_text(_BASE_SOL, encoding="utf-8")
+    (tmp_path / "remappings.txt").write_text("@lib/=src/lib/\n", encoding="utf-8")
+    token = src_dir / "Token.sol"
+    token.write_text(
+        "pragma solidity 0.8.19;\n"
+        'import "@lib/Base.sol";\n'
+        "contract Token is Base {\n"
+        "    function mint(address a, uint v) external { require(msg.sender == o); b[a] += v; }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    before = _listing_tree(tmp_path)
+    with _readonly_tree(tmp_path):
+        result = analyze_file(token, "src/Token.sol", timeout_s=120, input_root=tmp_path)
+    assert result.verdict == "Malicious"
+    assert result.reason != "analysis_error"
+    assert result.reason != "compile_failed"
+    assert _listing_tree(tmp_path) == before
+
+
+def test_scratch_root_removed_after_analyze_dir(tmp_path) -> None:
+    (tmp_path / "A.sol").write_text(RELAXABLE_SOURCE, encoding="utf-8")
+    (tmp_path / "B.sol").write_text(
+        "pragma solidity 0.8.20; contract B { uint256 x; function f() public { x = 1; } }\n",
+        encoding="utf-8",
+    )
+    before = {name for name in os.listdir(tempfile.gettempdir()) if name.startswith("detector-")}
+    previous = os.environ.get("DETECTOR_SCRATCH_DIR")
+    results, _skipped = analyze_dir(tmp_path)
+    after = {name for name in os.listdir(tempfile.gettempdir()) if name.startswith("detector-")}
+    assert after - before == set()
+    assert os.environ.get("DETECTOR_SCRATCH_DIR") == previous
+    assert {row.file for row in results} == {"A.sol", "B.sol"}
+    assert all(row.reason != "analysis_error" for row in results)
 
 
 HARNESS_FILES = [

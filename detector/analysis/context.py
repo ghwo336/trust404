@@ -24,6 +24,9 @@ class ContractContext:
     slither: Any
     contract: Any
     input_root: Path
+    # When the retry ladder compiled a scratch-mirror rewrite, Slither filenames point at the
+    # mirror. Treat that tree as in-project too (same relative layout as `input_root`).
+    compile_root: Path | None = None
 
     def __post_init__(self) -> None:
         # Pin strong-ref caches on the live contract (reachable from slither).
@@ -33,7 +36,15 @@ class ContractContext:
         self._branch_atoms_cache = contract_cache(self.contract, CACHE_BRANCH)
 
     def is_from_input_root(self, function_or_contract: Any) -> bool:
-        return is_under_root(function_or_contract, self.input_root)
+        if is_under_root(function_or_contract, self.input_root):
+            return True
+        extra = self.compile_root
+        if extra is None:
+            return False
+        extra_res = Path(extra).resolve()
+        if extra_res == Path(self.input_root).resolve():
+            return False
+        return is_under_root(function_or_contract, extra_res)
 
     @cached_property
     def functions(self) -> list[Any]:

@@ -10,7 +10,7 @@ from pathlib import Path
 
 from jsonschema.validators import Draft202012Validator
 
-from detector.compile import is_temp_copy
+from detector.compile import is_temp_copy, scratch_session
 from detector.describe import (
     REASON_SENTENCES,
     bounding_notes,
@@ -120,29 +120,30 @@ def run_submission(
     )
     start = now()
     objs: list[dict] = []
-    for path in paths:
-        elapsed = now() - start
-        if elapsed >= budget_s:
-            logger.info("budget_exhausted: skipping %s", path.name)
-            objs.append(_budget_object(path.name))
-            continue
-        remaining = budget_s - elapsed
-        per_timeout = min(timeout_s, remaining)
-        if not isinstance(per_timeout, int):
-            per_timeout = max(1, int(per_timeout))
-        if per_timeout < 1:
-            per_timeout = 1
-        try:
-            result = analyze_file(
-                path,
-                rel=path.name,
-                timeout_s=per_timeout,
-                input_root=input_dir,
-            )
-        except Exception as exc:
-            logger.warning("analyze_file failed for %s: %s", path.name, exc)
-            result = FileResult(path.name, "Uncertain", reason="analysis_error")
-        objs.append(to_judge_object(result, path))
+    with scratch_session():
+        for path in paths:
+            elapsed = now() - start
+            if elapsed >= budget_s:
+                logger.info("budget_exhausted: skipping %s", path.name)
+                objs.append(_budget_object(path.name))
+                continue
+            remaining = budget_s - elapsed
+            per_timeout = min(timeout_s, remaining)
+            if not isinstance(per_timeout, int):
+                per_timeout = max(1, int(per_timeout))
+            if per_timeout < 1:
+                per_timeout = 1
+            try:
+                result = analyze_file(
+                    path,
+                    rel=path.name,
+                    timeout_s=per_timeout,
+                    input_root=input_dir,
+                )
+            except Exception as exc:
+                logger.warning("analyze_file failed for %s: %s", path.name, exc)
+                result = FileResult(path.name, "Uncertain", reason="analysis_error")
+            objs.append(to_judge_object(result, path))
     should_validate = strict or os.environ.get("DETECTOR_VALIDATE") == "1"
     if should_validate:
         try:

@@ -9,7 +9,13 @@ from pathlib import Path
 from slither import Slither
 
 from detector.analysis.context import ContractContext
-from detector.compile import CompileError, cleanup_temp_copies, compile_file_ex, is_temp_copy
+from detector.compile import (
+    CompileError,
+    cleanup_temp_copies,
+    compile_file_ex,
+    is_temp_copy,
+    scratch_session,
+)
 from detector.model import FileResult, Finding
 from detector.policy import decide, finalize
 from detector.rules import RULES
@@ -17,6 +23,22 @@ from detector.rules import RULES
 logger = logging.getLogger("detector.engine")
 
 WORKER_TIMEOUT_DEFAULT = 120
+
+
+def _compile_root(compiled, input_root: Path) -> Path | None:
+    """Mirror root Slither compiled, or None when it parsed the original file."""
+    source = Path(compiled.source_path).resolve()
+    canonical = Path(compiled.canonical_path).resolve()
+    if source == canonical:
+        return None
+    try:
+        rel = canonical.relative_to(Path(input_root).resolve())
+    except ValueError:
+        return source.parent
+    cursor = Path(compiled.source_path)
+    for _ in rel.parts:
+        cursor = cursor.parent
+    return cursor
 
 
 def _input_root(path: Path, rel: str) -> Path:
@@ -141,10 +163,16 @@ def _analyze_in_process(path: str, rel: str, input_root: str | None = None) -> d
         logger.info("compile note for %s: %s", rel, compiled.note)
     slither = compiled.slither
     findings: list[Finding] = []
-    # Provenance root is the CLI input directory; a ladder temp copy sits next to the source.
-    # Slither filenames point at the file it parsed (temp copy when the ladder rewrote the source).
+    # Provenance root is the CLI input directory (original path). When the ladder rewrote
+    # into a scratch mirror, Slither filenames point there — pass that tree as compile_root.
+    compile_root = _compile_root(compiled, root)
     for contract in target_contracts(slither, compiled.source_path):
-        ctx = ContractContext(slither=slither, contract=contract, input_root=root)
+        ctx = ContractContext(
+            slither=slither,
+            contract=contract,
+            input_root=root,
+            compile_root=compile_root,
+        )
         raw: list[Finding] = []
         for rule in RULES:
             raw.extend(rule(ctx))
@@ -204,6 +232,11 @@ def analyze_file(
     input_root: Path | None = None,
 ) -> FileResult:
     root = Path(input_root).resolve() if input_root is not None else _input_root(path, rel)
+    with scratch_session():
+        return _run_file_worker(path, rel, timeout_s=timeout_s, root=root)
+
+
+def _run_file_worker(path: Path, rel: str, *, timeout_s: int, root: Path) -> FileResult:
     ctx = multiprocessing.get_context("spawn")
     queue = ctx.Queue()
     proc = ctx.Process(
@@ -218,9 +251,9 @@ def analyze_file(
         if proc.is_alive():
             proc.kill()
             proc.join()
-        # A killed worker skips compile_file_ex's cleanup; drop any temp copy it left behind.
+        # A killed worker skips compile_file_ex's cleanup; drop any scratch mirror it left behind.
         for leftover in cleanup_temp_copies(path):
-            logger.warning("removed leftover ladder temp copy %s after timeout", leftover)
+            logger.warning("removed leftover ladder scratch %s after timeout", leftover)
         return FileResult(rel, "Uncertain", reason="timeout")
     try:
         status, payload = queue.get(timeout=1)
@@ -248,21 +281,22 @@ def analyze_dir(
     root = Path(input_dir).resolve()
     results: list[FileResult] = []
     skipped = 0
-    # Follow dir symlinks (Foundry/Hardhat vendored trees) but skip ladder temp copies.
-    for path in _iter_sol_files(root):
-        if is_dependency_target(path, root):
-            skipped += 1
-            continue
-        rel = path.relative_to(root).as_posix()
-        try:
-            results.append(analyze_file(path, rel, timeout_s=timeout_s, input_root=root))
-        except Exception as exc:
-            logger.warning("analyze_dir failed for %s: %s", rel, exc)
-            results.append(FileResult(rel, "Uncertain", reason="analysis_error"))
-    if skipped:
-        logger.info(
-            "skipped %s dependency file(s) under node_modules/ or lib/<pkg>/ "
-            "(analysed as imports only)",
-            skipped,
-        )
-    return results, skipped
+    with scratch_session():
+        # Follow dir symlinks (Foundry/Hardhat vendored trees) but skip leftover __relaxed__ names.
+        for path in _iter_sol_files(root):
+            if is_dependency_target(path, root):
+                skipped += 1
+                continue
+            rel = path.relative_to(root).as_posix()
+            try:
+                results.append(analyze_file(path, rel, timeout_s=timeout_s, input_root=root))
+            except Exception as exc:
+                logger.warning("analyze_dir failed for %s: %s", rel, exc)
+                results.append(FileResult(rel, "Uncertain", reason="analysis_error"))
+        if skipped:
+            logger.info(
+                "skipped %s dependency file(s) under node_modules/ or lib/<pkg>/ "
+                "(analysed as imports only)",
+                skipped,
+            )
+        return results, skipped

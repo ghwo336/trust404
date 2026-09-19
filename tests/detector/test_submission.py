@@ -398,6 +398,63 @@ def test_docker_entry_submission_argv(monkeypatch) -> None:
     assert seen == [["/input", "--budget", "60"]]
 
 
+def _freeze_tree(root: Path) -> None:
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        for name in filenames:
+            os.chmod(os.path.join(dirpath, name), 0o444)
+        for name in dirnames:
+            os.chmod(os.path.join(dirpath, name), 0o555)
+    os.chmod(root, 0o555)
+
+
+def _thaw_tree(root: Path) -> None:
+    try:
+        os.chmod(root, 0o755)
+    except OSError:
+        pass
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        try:
+            os.chmod(dirpath, 0o755)
+        except OSError:
+            pass
+        for name in filenames:
+            try:
+                os.chmod(os.path.join(dirpath, name), 0o644)
+            except OSError:
+                pass
+
+
+def test_cli_submission_read_only_ladder_file(tmp_path: Path) -> None:
+    src = tmp_path / "T.sol"
+    src.write_text(
+        "// SPDX-License-Identifier: MIT\n"
+        "pragma solidity 0.8.19;\n"
+        "contract T { mapping(address=>uint) b; address o; "
+        "constructor(){o=msg.sender;} "
+        "function mint(address a,uint v) external { require(msg.sender==o); b[a]+=v; } "
+        "function transfer(address t,uint v) external { b[msg.sender]-=v; b[t]+=v; } }\n",
+        encoding="utf-8",
+    )
+    _freeze_tree(tmp_path)
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-m", "detector.cli", str(tmp_path)],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    finally:
+        _thaw_tree(tmp_path)
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert isinstance(payload, list)
+    validate_against_schema(payload)
+    assert len(payload) == 1
+    assert payload[0]["file"] == "T.sol"
+    assert payload[0]["verdict"] == "MALICIOUS"
+
+
 def test_usdc_exit_addr_gate_carries_governance_note() -> None:
     path = (
         REPO_ROOT / "cases" / "tier3_benign_risky" / "usdc_fiattoken" / "FiatTokenV1.sol"
