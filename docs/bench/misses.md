@@ -70,6 +70,15 @@ Run 4 — 2026-09-20, Tier 2 after the root-cause pass (all fixes in the analysi
 | 2026-09-20 | detector | tier2: crpwarner `0x90F7…` PldGenesisRewardPool, `0x9372…` BoredBunny | B (Hidden Mint) | Uncertain / Malicious | external gate / placement | reward token minted outside the file; ERC721 `giftMint` ledger not modeled | open |
 | 2026-09-20 | detector | tier2: crpwarner `0xD217…` BaseToken `require(enabled \|\| hasRole(...))` | transfer unprivileged | `transfer` marked privileged | policy | `bool_needed_true` treats `\|\|` operands as needed-true. Spec amended: disjunction yields no needed-true atoms; `state_gate \|\| auth_atom` on a transfer path is a gate with a privileged bypass (`priv_bypass`) | open |
 
+Tier 0 — 2026-09-20 02:36, the organizers' public set arrived (`challenge_public/`, 5 files, labels in file comments; README + schema vendored at `docs/judge/challenge_public/`). Ingested with `bench ingest-discord`; `bench run detector --tier 0`: weighted 0.8, 3/5 exact. Under the organizers' own scoring (+1/0/−1) that is 3 of 5 points.
+
+| date | tool | case | expected | got | bucket | fix | status |
+|---|---|---|---|---|---|---|---|
+| 2026-09-20 | detector | tier0/P4_CappedMint | Benign | Uncertain(med_findings) BAL_PRIV_MINT `constant_cap`→MED | doctrine → **policy** | organizers' rule 2 (code-enforced cap is BENIGN) is explicit; spec "Judge alignment" table: `constant_cap` → INFO; also `ungate_exists`/`constant_floor`/`bounded_window` (symmetric restriction, rule 1) and `no_custody` (rule 3) → INFO | open |
+| 2026-09-20 | detector | tier0/P5_DelegatecallBackdoor | Malicious | Uncertain(slither_high) | placement | `STRUCT_DELEGATECALL_SETTABLE` required a PW state-var target; here the target is a **parameter** of an `onlyOwner` function (`execute(address target, bytes data)`), only the Slither `controlled-delegatecall` overlay caught it. Spec: trigger widened to parameter/calldata-dependent targets of privileged functions | open |
+| 2026-09-20 | detector | tier0/* (output contract) | one JSON array on stdout, `MALICIOUS/BENIGN/UNCERTAIN`, `reasons[]`, `evidence[{function,line}]`, basename `file`, top-level files only, 10-min kill | `results.json` + `summary.md` at a path, `Malicious/…`, findings list | reporting | spec: `cli.py` submission mode + `run.sh` + `docker_entry`; `judge.schema.json` vendored; global budget (DT-13) | open |
+| 2026-09-20 | detector | tier0/P1, P2, P3 | Benign / Malicious / Malicious | Benign / Malicious / Malicious, evidence lines 32 & 37 on P3 match the README's stated basis | — | none | ok |
+
 Probe — 2026-09-20, adversarial inputs and project layouts (`/tmp`, not corpus). Found outside the labelled corpus, fixed via spec amendments and harness fixtures:
 
 | date | tool | case id | expected | got | bucket | fix | status |

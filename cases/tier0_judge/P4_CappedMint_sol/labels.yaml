@@ -1,0 +1,6 @@
+id: tier0/P4_CappedMint_sol
+file: P4_CappedMint_sol.sol
+solc: 0.8.24
+preferred_verdict: Benign
+accepted_verdicts:
+- Benign

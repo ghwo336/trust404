@@ -4,7 +4,7 @@ Offline static detector for TRUST404 Track 1 (intentional malice: rug pulls, hon
 
 ## Purpose
 
-Given a directory of `.sol` files, emit one schema-valid `results.json` (the Track 1 submission format) plus a human-readable `summary.md`, with a verdict per file (`Malicious | Uncertain | Benign`) and evidence-bearing findings (contract, function, lines, reasoning), derived from **logic flow and permission structure**, never from identifier names.
+Given a directory of `.sol` files, emit a verdict per file (`Malicious | Uncertain | Benign`) with evidence-bearing findings (contract, function, lines, reasoning), derived from **logic flow and permission structure**, never from identifier names. Two output surfaces over the same engine: the bench format (`results.json` + `summary.md`, for `bench run`) and the **organizers' submission format** (one JSON array on stdout per `docs/judge/challenge_public/schema.json`; see `cli.py` submission mode).
 
 ## Non-negotiable constraints
 
@@ -113,7 +113,16 @@ One result per `.sol` file under the input root (recursive, sorted by relative P
 
 ### `cli.py`
 
-`python -m detector.cli <input_dir> <results.json> [--timeout 120] [--no-summary]`. Exit 0 whenever `results.json` was written (even if every file is Uncertain). Exit 2 on argument errors only.
+Two modes, same engine and policy:
+
+- **Bench mode** (unchanged): `python -m detector.cli <input_dir> <results.json> [--timeout 120] [--no-summary]`. Recursive walk, `results.json` + `summary.md`. Exit 0 whenever `results.json` was written. Exit 2 on argument errors only.
+- **Submission mode** (added 2026-09-20 from the organizers' `challenge_public/README.md` + `schema.json`, vendored at `docs/judge/challenge_public/` and `detector/schema/judge.schema.json`): `python -m detector.cli <input_dir>` (no output path) prints **exactly one JSON array to stdout and nothing else**; every log line goes to stderr. Wrapped by `run.sh <dir>` at the repo root and by the Docker `ENTRYPOINT` when `/output` is not mounted. Rules from the README, applied literally:
+  - Only `*.sol` files **directly under** `<input_dir>` are analysed (the grader never uses subdirectories); `--recursive` restores the bench walk. `file` is the **basename**.
+  - Objects follow `judge.schema.json`: `file`, `verdict ∈ {MALICIOUS, BENIGN, UNCERTAIN}` (upper-case), `reasons: [str]`, `evidence: [{function, line}]`; `MALICIOUS` **must** carry ≥1 evidence item; `line` must be within the file. Optional `risk_level`, `risk_type ∈ {BACKDOOR, VULNERABILITY, CENTRALIZATION, NONE}`, `confidence` are filled from severity / rule family / discriminators.
+  - `reasons` are graded 0/1/2 for validity: each string must connect **privilege → state change → user/asset impact** using the actual identifiers, in the order HIGH → MED → INFO, one per distinct rule (from `describe.py` explanations + the finding's reasoning). `BENIGN` states the safety invariant that held (no privileged writer of balances / gates / value sinks, or which bound applied). `UNCERTAIN` names the missing information (compile failure, external dependency, disclosed-but-unbounded control).
+  - **Global deadline.** The grader kills the process at 10 min on 2 vCPU; a killed process with no array on stdout scores 0 for the whole submission. Submission mode keeps a wall-clock budget (default 8 min, `--budget`), after which remaining files are emitted as `UNCERTAIN` with reason `budget_exhausted`, and the array is printed. The per-file timeout stays.
+  - Exit code 0 always once the array is printed. A file that fails to parse/compile is `UNCERTAIN` and processing continues (already the engine contract).
+  - `check-jsonschema --schemafile docs/judge/challenge_public/schema.json out.json` passes on the Tier 0 output; a unit test validates the adapter against the vendored schema for every verdict class.
 
 ### `analysis/privilege.py` (research §5 predicate 1 — name-agnostic)
 
@@ -204,6 +213,19 @@ Every finding: `contract`, `function` (the function that carries the evidence �
   6. else `Benign`.
 - Concealment override: if any of {`OWN_HIDDEN_ROLE`, `OWN_FAKE_RENOUNCE`, `VIEW_CALLER_DEPENDENT`, `BAL_TRANSFER_HIDDEN_MINT`, `LEAK_EXEMPT_PATH`, `EXIT_CALLBACK_CYCLE`} fired at HIGH in the contract, **no downgrade applies** to any finding of that contract (disclosed-centralization shapes cannot launder a concealed control).
 
+### Judge alignment (amended 2026-09-20 from `challenge_public/README.md` §판정 경계; grading is +1 correct / 0 UNCERTAIN / −1 wrong)
+
+The organizers' verdict boundaries are an SSOT above our doctrine where they are explicit. Three of their four rules are explicit and change the discriminator table; the fourth (centralization notes on BENIGN are free) is already how we report.
+
+| Organizer rule | Effect on `adjust`/`decide` | Corpus proof |
+|---|---|---|
+| 2. A mint whose cap is **enforced in code** is BENIGN (dilution inside the cap may be noted). | `constant_cap` on `BAL_PRIV_MINT` → **INFO** (was MED). The cap must be `constant`/`immutable`/supply-derived (`is_constant_bound`); a settable cap variable is not a cap and the finding stays HIGH. `role_separated_cap` (USDC `minterAllowed`, settable by another role) stays MED. | `tier0/P4_CappedMint` → Benign; `tier1/BAL_PRIV_MINT/ben` → Benign; `tier3/oz_erc20capped_accesscontrol` → Benign |
+| 1. A **symmetric** availability restriction (pause/freeze/limit that binds the owner too) is BENIGN; an **asymmetric** one (owner exempt) is MALICIOUS. | `ungate_exists` on `EXIT_GLOBAL_SWITCH` → **INFO** when no `priv_bypass` (was MED); `constant_floor` / `bounded_window` on `EXIT_AMOUNT_LIMIT` → **INFO** when no `priv_bypass`. `priv_bypass` (owner-exempt gate; see 4d amends) blocks every downgrade → HIGH. A switch with **no** ungate stays HIGH (one-way freeze after the owner has exited is the rug primitive; the organizers' "symmetric" wording presumes recoverability). | `tier1/EXIT_GLOBAL_SWITCH/ben`, `tier1/EXIT_AMOUNT_LIMIT/ben`, `tier3/oz_erc20_pausable_ownable` → Benign; `_harness/trading_switch_owner_bypass` → Malicious |
+| 3. ETH force-sent into a contract with **no deposit path** is not user money; the owner recovering it is not theft. | `no_custody` on `LEAK_PRIV_SWEEP` → **INFO** (was MED). | `tier1/LEAK_PRIV_SWEEP/ben` → Benign |
+| — | `managed_role`, `issuer_token`, `external_dependency`, `two_step_handoff`-adjacent shapes are **not** addressed by the organizers' rules and stay MED → UNCERTAIN (0 points, no −1). Blacklists under a managed compliance role (USDC) are the organizers' likely "benign-but-risky trap" **or** their "targeted honeypot" — undecidable from the README; UNCERTAIN is the expected-value-neutral verdict. | `tier3/usdc_fiattoken`, `bancor_smarttoken`, `lido_ldo_minime` stay Uncertain |
+
+Escalation (step 3) counts only findings that are still MED after this table; a contract whose only findings became INFO under rules 1–3 is BENIGN. The Tier 1 `ben` twins already carry `preferred_verdict: Benign`, so this moves the bench toward its own labels; no label changes.
+
 ## Rule table (all 29 catalog IDs; base severity = catalog)
 
 Notation: PW = privileged-writable state var (`privilege.privileged_writable`); TP = transfer path; EN = end node on TP; `bal` = bound balance mapping(s).
@@ -232,7 +254,7 @@ Notation: PW = privileged-writable state var (`privilege.privileged_writable`); 
 | `OWN_REASSIGN_NONSTD` | D | HIGH | an auth var written outside the constructor by a **non-privileged** function, or assigned a literal address / `msg.sender` by a function that is not gated by that same var | `one_shot_initializer` → drop; `two_step_handoff` → drop |
 | `OWN_TX_ORIGIN` | D | MED | an AuthAtom with `sender_source == "tx.origin"` gates a function | — |
 | `STRUCT_EXTERNAL_GATE` | E | MED | on TP, an external call (HighLevel/LowLevel) whose destination is a PW address (constructor-only/immutable targets do not fire) | → verdict `Uncertain(external_dependency)` unless a HIGH is present |
-| `STRUCT_DELEGATECALL_SETTABLE` | E | HIGH | `delegatecall` (IR `LowLevelCall`, or YUL/inline-assembly `delegatecall`) whose target is a PW address, **not** in the proxy-fallback shape | — |
+| `STRUCT_DELEGATECALL_SETTABLE` | E | HIGH | `delegatecall` (IR `LowLevelCall`, or YUL/inline-assembly `delegatecall`) whose target is a PW address **or is data-dependent on a parameter / calldata of a privileged function** (owner-chosen target at call time; `tier0/P5_DelegatecallBackdoor.execute(address target, bytes data)`), **not** in the proxy-fallback shape. (Amended 2026-09-20: the parameter form was only caught by the Slither `controlled-delegatecall` overlay → Uncertain; the organizers label it MALICIOUS.) | — |
 | `STRUCT_SELFDESTRUCT` | E | HIGH | `selfdestruct` reachable from any public/external function | — |
 | `STRUCT_PROXY_EOA_ADMIN` | E | MED | proxy-fallback shape: `fallback` forwards calldata via `delegatecall` to an address loaded from a PW state var whose writer is gated by a single state `address` auth var | — |
 | `DRAIN_APPROVAL_PULL` | F | HIGH | a non-privileged external function makes a `HighLevelCall` matching `transferFrom(address,address,uint256)` (or `safeTransferFrom`, or `permit` followed by such) with arg0 sender-dependent and arg1 **not** sender-dependent, and the function performs no state write keyed by the sender and no value/token send to the sender | — |
@@ -261,7 +283,7 @@ Sorted file walk; sorted contract/function iteration (by `source_mapping` start)
 
 ## Docker (`detector/Dockerfile`)
 
-`python:3.11-slim`; `git`; `dpkg --add-architecture amd64 && apt-get install libc6:amd64` (portable to arm64 hosts, see `Dockerfile.bench`); `pip install -r detector/requirements.txt`; `solc-select install` the pinned set; `COPY detector /app/detector`, `COPY vendor/openzeppelin-contracts /app/vendor/openzeppelin-contracts`; `ENV DETECTOR_OZ_DIR=/app/vendor/openzeppelin-contracts PYTHONPATH=/app`; `ENTRYPOINT ["python","-m","detector.cli","/input","/output/results.json"]`. Image `trust404/detector:latest`.
+`python:3.11-slim`; `git`; `dpkg --add-architecture amd64 && apt-get install libc6:amd64` (portable to arm64 hosts, see `Dockerfile.bench`); `pip install -r detector/requirements.txt`; `solc-select install` the pinned set; `COPY detector /app/detector`, `COPY vendor/openzeppelin-contracts /app/vendor/openzeppelin-contracts`; `ENV DETECTOR_OZ_DIR=/app/vendor/openzeppelin-contracts PYTHONPATH=/app`; `ENTRYPOINT ["python","-m","detector.docker_entry"]` — a thin launcher: if `/output` is a mounted, writable directory → bench mode (`/input` → `/output/results.json` + `summary.md`); otherwise → submission mode (JSON array on stdout). Image `trust404/detector:latest`. `run.sh <dir>` at the repo root runs the image in submission mode (`--network none`, `:ro` input) and falls back to the local venv when Docker is unavailable.
 
 ## Tests (`tests/detector/`)
 
@@ -291,6 +313,8 @@ Sorted file walk; sorted contract/function iteration (by `source_mapping` start)
 | DT-10 | Runtime: Tier 1+3 in Docker under 5 minutes; per-file timeout yields Uncertain(`timeout`), never a crash | OPEN |
 | DT-11 | Judge packaging: one `docker run --rm --network none -v in:/input:ro -v out:/output trust404/detector` produces `results.json` and a human-readable `summary.md`; README explains verdict derivation | OPEN |
 | DT-12 | Iterate loop evidenced: `docs/bench/misses.md` has one triaged row per first-run gap with bucket, fix, status; `reports/detector/` committed | OPEN |
+| DT-13 | **Submission contract** (added 2026-09-20 from `challenge_public/`): `./run.sh <dir>` and `docker run --rm --network none -v <dir>:/input:ro trust404/detector` print one `schema.json`-valid JSON array to stdout (logs on stderr, exit 0); `MALICIOUS` objects carry evidence with in-range lines; only top-level `*.sol` are emitted with basename `file`; global budget yields the array before the organizers' 10-min kill | OPEN |
+| DT-14 | **Tier 0 = 5/5** on the public samples with the organizers' labels (`P1`, `P4` BENIGN; `P2`, `P3`, `P5` MALICIOUS), `reasons` non-empty and consistent with the verdict for every file; Tier 1/3 verdicts move only toward `preferred_verdict` under the judge-alignment table | OPEN |
 
 ## Phasing (ordering only; no row is dropped)
 
@@ -299,6 +323,7 @@ Sorted file walk; sorted contract/function iteration (by `source_mapping` start)
 - 4c Rules C, E, F, G + overlay; full policy. → DT-3, DT-4, DT-5.
 - 4d Iterate on Tier 2/3 with `docs/bench/misses.md`. → DT-6, DT-7, DT-9, DT-10, DT-12.
 - 4e Packaging: `summary.md`, README. → DT-11.
+- 4f Submission alignment (public set arrived 2026-09-20): `judge.schema.json` adapter + `run.sh` + Docker entrypoint, judge-alignment discriminator table, `STRUCT_DELEGATECALL_SETTABLE` parameter form, Tier 0 ingested. → DT-13, DT-14.
 
 ## Known risks (recorded, not scope changes)
 
