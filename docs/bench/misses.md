@@ -33,6 +33,20 @@ Tier 2 compile triage (250 of 779 sources did not compile at ingest; first solc 
 | 2026-09-19 | detector | tier2/* 16 files, missing imports / garbage | compile | `Source "…" not found` | compile | dependency files absent from the dataset | unfixable (dataset) |
 
 Net: 529 → 592 compiling of 779 (76%); the 187 remaining are `Uncertain(compile_failed)` by construction and are labelled `Uncertain` in the corpus.
+
+Run 3 — Tier 2 first pass (779 cases, 590 compiling): weighted 0.7901; family recall A 0.967 / B 0.490 / C 1.0 (n=3) / F 0.031 (322); on the 527 compiling Malicious-labelled files 368 Malicious, 97 Uncertain, 62 Benign. Root-cause pass in progress; rows land here when it reports.
+
+Probe — 2026-09-20, adversarial inputs and project layouts (`/tmp`, not corpus). Found outside the labelled corpus, fixed via spec amendments and harness fixtures:
+
+| date | tool | case id | expected | got | bucket | fix | status |
+|---|---|---|---|---|---|---|---|
+| 2026-09-20 | detector | probe: `is ERC20, Ownable` + `onlyOwner` blacklist gate (`OzOwnableRug`, now `_harness/oz_ownable_rug`) | Malicious | Uncertain(med_findings) | policy | `library_role` downgraded EXIT_ADDR_GATE because `onlyOwner` is vendored. Provenance is not a benign signal; `library_role` removed from the downgrade table (spec amended) | open |
+| 2026-09-20 | detector | probe: OZ `mocks/compound/CompTimelock.sol` | Benign/Uncertain | Malicious (OWN_FAKE_RENOUNCE, OWN_REASSIGN_NONSTD) | policy | `acceptAdmin` (pending → admin handoff) read as fake renounce + nonstandard reassign; `setPendingAdmin` gated by `msg.sender == address(this)` read as unprivileged. Spec: `two_step_handoff` drop discriminator, `eq_self` auth atom; fixtures `_harness/timelock_self_call`, `_harness/oz_ownable2step_token` | open |
+| 2026-09-20 | detector | probe: Foundry layout, `import "../lib/oz/…"` | compiles | Uncertain(compile_failed) | compile | `--allow-paths` only covered the file's parent; spec: allow the whole input root, honour `remappings.txt`/`foundry.toml`, auto-map `node_modules/` and `lib/<pkg>/` | open |
+| 2026-09-20 | detector | probe: Foundry/Hardhat layout, 263 vendored OZ files | not analysed as targets | 187 compile_failed + 75 Benign + 1 Malicious rows | reporting | dependency packages (`node_modules/`, package-shaped `lib/<pkg>/`) excluded from targets, count reported | open |
+| 2026-09-20 | detector | probe: UTF-8 BOM prefix | compiles | Uncertain(compile_failed) | compile | BOM strip rung in the retry ladder | open |
+| 2026-09-20 | detector | probe: CRLF, empty file, comment-only, interface-only, library-only, nested dirs, paths with spaces, 3000-state-var file, infinite assembly loop, non-.sol files, two pragmas, wide pragma | sane | sane (no crash, no hang, 5 s total) | — | none needed | ok |
+| 2026-09-20 | detector | probe: `address o;` (internal, no getter) gating a setter of an unused mapping | ? | Malicious (OWN_HIDDEN_ROLE) | doctrine | consistent with `tier1/OWN_HIDDEN_ROLE/mal` (hidden role with no consumer is labelled Malicious). Whether a hidden role with **no impact** should be MED is a doctrine question for the owner; not changed | question |
 | 2026-09-19 | detector | tier1/{BAL_PRIV_MINT,EXIT_AMOUNT_LIMIT,EXIT_GLOBAL_SWITCH,PRIV_ROLE}/ben | Benign (acc. Uncertain) | Uncertain(med_findings) | doctrine | capped mint / bounded window / unpause exists / documented blacklist role → MED by design | wontfix |
 | 2026-09-19 | detector | tier3/{usdc_fiattoken,oz_erc20_pausable_ownable,oz_erc20capped_accesscontrol,reflection_token,bancor_smarttoken} | Benign (acc. Uncertain) | Uncertain(med_findings) | doctrine | disclosed/managed privilege (blacklister, pauser, minter cap, issuer) → MED; no HIGH survived | wontfix |
 | 2026-09-19 | detector | tier3/lido_ldo_minime | Benign (acc. Uncertain) | Uncertain(external_dependency) | doctrine | `doTransfer` calls settable `controller` → STRUCT_EXTERNAL_GATE MED, as spec'd | wontfix |

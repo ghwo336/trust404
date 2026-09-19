@@ -75,7 +75,7 @@ Registry entry in `baybench/tools.yaml`:
                        └──► model.write_results(results.json)  +  summary.write_summary(summary.md)
 ```
 
-One result per `.sol` file under the input root (recursive, sorted by relative POSIX path). A file is analysed in isolation with its imports resolved (relative imports and `@openzeppelin/` via remap). Findings are attributed to a file only for contracts *declared in that file*; inherited functions declared elsewhere are analysed as part of the target contract but their provenance is recorded (used by `library_role`).
+One result per `.sol` file under the input root (recursive, sorted by relative POSIX path), **excluding dependency packages**: files under `node_modules/`, or under `lib/<pkg>/` where `<pkg>` contains `package.json`, `foundry.toml`, `.git`, or a `src/`/`contracts/` tree (Foundry submodules), are not analysed as targets (they are imports, not the submission; the count of skipped files is logged and shown in `summary.md`). A file is analysed in isolation with its imports resolved: relative imports anywhere under the input root (`--allow-paths <input_root>,<oz>`), `@openzeppelin/` via the vendored remap, `remappings.txt` / `foundry.toml` `remappings = [...]` at the input root when present, and `@scope/pkg/` → `<root>/node_modules/@scope/pkg/` or `lib/<pkg>/` (`/contracts`, `/src`) when such a directory exists. A UTF-8 BOM is stripped through the retry-ladder temp copy. (Amended 2026-09-20 after a project-layout probe: the Foundry `../lib/...` import failed with `compile_failed` and 263 vendored OZ files were analysed as targets, one of them — `mocks/compound/CompTimelock.sol` — as Malicious.) Findings are attributed to a file only for contracts *declared in that file*; inherited functions declared elsewhere are analysed as part of the target contract but their provenance is recorded (used by `library_role`).
 
 ## Module interfaces
 
@@ -149,8 +149,10 @@ One result per `.sol` file under the input root (recursive, sorted by relative P
 
 ### `analysis/roles.py` (research §6 shapes; all structural)
 
-- `managed_role(ctx, auth_var) -> bool` — `auth_var` is written outside the constructor **only** by privileged functions whose own auth atoms use a different auth var (`owner → blacklister → blacklist()`, two-step ownership `newOwner → owner`). Self-managed roles (OZ `Ownable._owner` written under `_owner`) are **not** managed.
-- `library_role(ctx, function) -> bool` — every auth atom gating `function` lives in a source file **outside the input root** (e.g. vendored OZ `AccessControl`). Provenance-based, not name-based.
+- `managed_role(ctx, auth_var) -> bool` — `auth_var` is written outside the constructor **only** by privileged functions whose own auth atoms use a different auth var (`owner → blacklister → blacklist()`, two-step ownership `newOwner → owner`), **or** — role-admin indirection (OZ `AccessControl` shape, local or vendored) — the writers are gated by an atom on the *same* mapping whose key is not the constant role id being granted but is data-dependent on a state read of that mapping (`_roles[role].adminRole`). Self-managed roles (OZ `Ownable._owner` written under `_owner`) are **not** managed.
+- `library_role(ctx, function) -> bool` — every auth atom gating `function` lives in a source file **outside the input root**. **Amended 2026-09-20: provenance is NOT a benign signal and `library_role` is no longer a downgrade discriminator.** The canonical rug pull is `is ERC20, Ownable` with an `onlyOwner` blacklist gate; the probe `OzOwnableRug` came out `Uncertain` because `onlyOwner` was vendored. The predicate may remain as evidence text only.
+- `two_step_handoff(ctx, function) -> bool` — the function is gated by an auth var `p` that gates **no other** privileged function, assigns `msg.sender` (or `p`) to another auth var `o`, and clears `p` in the same body (`acceptOwnership` / `acceptAdmin`; OZ `Ownable2Step`, Compound Timelock, Bancor `Owned`). Exempts OWN_FAKE_RENOUNCE and OWN_REASSIGN_NONSTD (drop discriminator `two_step_handoff`).
+- `AuthAtom.kind` gains `eq_self`: `msg.sender == address(this)` (self-call gate; Compound Timelock `setPendingAdmin`). The function is privileged (only reachable through the contract's own privileged executor), never an ownership-fraud writer.
 - `issuer_token(ctx) -> bool` — the same auth var gates both a privileged **credit** (mint) and a privileged **debit at a non-sender key** (burn-other) of the bound balance mapping, and each of those functions emits ≥1 event whose arguments include the amount (`EventCall` in the function or its internal callees). Bancor `issue/destroy`, MiniMe `generateTokens/destroyTokens`.
 - `one_shot_initializer(function) -> bool` — the function's end node reads a state `bool`/`uint` that the same function writes (initializer shape); used to exempt `initialize` from OWN_REASSIGN_NONSTD.
 - `has_custody(ctx) -> bool` — some non-privileged `payable` function exists whose `msg.value` is not forwarded in full by an external call in the same function (MiniMe's `proxyPayment` forward is not custody; a vault `deposit()` is).
@@ -184,7 +186,7 @@ Every finding: `contract`, `function` (the function that carries the evidence �
 - `decide(findings: list[Finding]) -> (verdict, reason)`:
   1. any finding with `severity == HIGH` → `Malicious`.
   2. else if `STRUCT_EXTERNAL_GATE` present → `Uncertain`, `reason=external_dependency`.
-  3. else escalation: ≥2 findings with `severity == MED`, `counts_for_escalation`, distinct rule IDs, from ≥2 different families → `Malicious` (`reason=escalated:<ids>`) — unless a **suppressing shape** (`issuer_token` or any `managed_role`/`library_role` downgrade applied in this contract) is present.
+  3. else escalation: ≥2 findings with `severity == MED`, `counts_for_escalation`, distinct rule IDs, from ≥2 different families → `Malicious` (`reason=escalated:<ids>`) — unless a **suppressing shape** (`issuer_token` or any `managed_role` downgrade applied in this contract) is present.
   4. else any MED → `Uncertain`, `reason=med_findings`.
   5. else any `SLITHER_HIGH_OVERLAY` whose check is an **exploit-shape** check (`reentrancy-eth`, `arbitrary-send-eth`, `arbitrary-send-erc20`, `arbitrary-send-erc20-permit`, `suicidal`, `controlled-delegatecall`, `delegatecall-loop`, `msg-value-loop`, `unprotected-upgrade`, `protected-vars`, `rtlo`) → `Uncertain`, `reason=slither_high`. Other High-impact checks (e.g. `unchecked-transfer`, `uninitialized-state`, `shadowing-state`) are emitted as INFO evidence with discriminator `evidence_only` and never move the verdict (run 1 miss: `DRAIN_APPROVAL_PULL/ben`).
   6. else `Benign`.
@@ -197,7 +199,7 @@ Notation: PW = privileged-writable state var (`privilege.privileged_writable`); 
 | Rule | Fam | Base | Trigger (structural) | Discriminators → effect |
 |---|---|---|---|---|
 | `PRIV_ROLE` | A | INFO | one finding per privileged function (`function`=that function); reasoning names the auth var and atom kind | — |
-| `EXIT_ADDR_GATE` | A | HIGH | GateRead shape `map_addr_bool` (key from/to/msg.sender) on a PW mapping in an EN | `managed_role`→MED; `library_role`→MED; `issuer_token`→MED |
+| `EXIT_ADDR_GATE` | A | HIGH | GateRead shape `map_addr_bool` (key from/to/msg.sender) on a PW mapping in an EN | `managed_role`→MED; `issuer_token`→MED (`library_role` removed 2026-09-20) |
 | `EXIT_GLOBAL_SWITCH` | A | HIGH | GateRead shape `bool` on a PW bool in an EN | `ungate_exists`→MED (§6 OZ Pausable / Bancor / Lido); `managed_role`→MED; `issuer_token`→MED |
 | `EXIT_AMOUNT_LIMIT` | A | HIGH | GateRead `numeric_vs_amount` on a PW numeric in an EN | `constant_floor` (every writer of the var requires new value ≥ constant-bound expr)→MED; `bounded_window` (EN guard is `block.timestamp` vs `immutable`/`constant` expr) →MED; `managed_role`→MED |
 | `EXIT_TIME_GATE` | A | MED | GateRead `numeric_vs_time` on a PW numeric where the time comparison **is** the EN condition (not merely a guard of another gate) | `no_expiry` (no writer bounds the var by a constant/`block.timestamp + constant`) → **HIGH** |
@@ -214,8 +216,8 @@ Notation: PW = privileged-writable state var (`privilege.privileged_writable`); 
 | `LEAK_EXEMPT_PATH` | C | HIGH | on TP, a branch whose condition reads a PW var (map/bool/address vs sender) and in which the `bal` debit at `from` is skipped while a credit still happens | — (concealment) |
 | `LEAK_PRIV_SWEEP` | C | HIGH | privileged ETH send of `address(this).balance` (or `bal`/self-token transfer from `address(this)`, or `token_out_calls` with `token_source == "state"`) | `foreign_only` (`token_source == "param"` and either guarded by `!= address(this)` or the contract has no bound `bal`) → **INFO**; `no_custody` (ETH sweep and `not has_custody`) → MED; `issuer_token`→MED; `managed_role`→MED |
 | `OWN_HIDDEN_ROLE` | D | HIGH | an auth var (address or map) that gates ≥1 privileged function and is **not exposed** (`is_exposed` false) | — (concealment) |
-| `OWN_FAKE_RENOUNCE` | D | HIGH | a privileged function assigns `address(0)` (or `delete`) to an auth var `o` while another auth var `p ≠ o` that gates ≥1 privileged function is not cleared in the same function; or the "renounce" also writes a non-zero value into any auth var | — (concealment) |
-| `OWN_REASSIGN_NONSTD` | D | HIGH | an auth var written outside the constructor by a **non-privileged** function, or assigned a literal address / `msg.sender` by a function that is not gated by that same var | `one_shot_initializer` → drop |
+| `OWN_FAKE_RENOUNCE` | D | HIGH | a privileged function assigns `address(0)` (or `delete`) to an auth var `o` while another auth var `p ≠ o` that gates ≥1 privileged function is not cleared in the same function; or the "renounce" also writes a non-zero value into any auth var | `two_step_handoff` → drop (otherwise concealment, no downgrade) |
+| `OWN_REASSIGN_NONSTD` | D | HIGH | an auth var written outside the constructor by a **non-privileged** function, or assigned a literal address / `msg.sender` by a function that is not gated by that same var | `one_shot_initializer` → drop; `two_step_handoff` → drop |
 | `OWN_TX_ORIGIN` | D | MED | an AuthAtom with `sender_source == "tx.origin"` gates a function | — |
 | `STRUCT_EXTERNAL_GATE` | E | MED | on TP, an external call (HighLevel/LowLevel) whose destination is a PW address (constructor-only/immutable targets do not fire) | → verdict `Uncertain(external_dependency)` unless a HIGH is present |
 | `STRUCT_DELEGATECALL_SETTABLE` | E | HIGH | `delegatecall` (IR `LowLevelCall`, or YUL/inline-assembly `delegatecall`) whose target is a PW address, **not** in the proxy-fallback shape | — |
@@ -233,7 +235,8 @@ Notation: PW = privileged-writable state var (`privilege.privileged_writable`); 
 | class | names | effect on escalation |
 |---|---|---|
 | bound | `ungate_exists`, `constant_floor`, `bounded_window`, `constant_cap`, `role_separated_cap`, `fee_cap`, `foreign_only`, `no_custody` | downgraded finding does **not** count |
-| shape | `managed_role`, `library_role`, `issuer_token` | does not count **and** suppresses escalation for the contract |
+| shape | `managed_role`, `issuer_token` | does not count **and** suppresses escalation for the contract |
+| drop | `representation_switch`, `one_shot_initializer`, `two_step_handoff` | finding removed |
 | native MED | catalog MED rules (`EXIT_TIME_GATE`, `FEE_ADDR_MUTABLE`, `OWN_TX_ORIGIN`, `STRUCT_PROXY_EOA_ADMIN`, `HONEYPOT_LEGACY`, `PONZI_SHAPE`) | counts |
 
 `STRUCT_EXTERNAL_GATE` never counts (it is Uncertain-with-reason by design).
