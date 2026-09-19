@@ -13,6 +13,17 @@ from tests.detector.conftest import HARNESS, REPO_ROOT
 SUMMARY_LINE = re.compile(r"^detector: (\d+) files, (\d+)/(\d+)/(\d+)$", re.MULTILINE)
 
 
+def test_cli_missing_input_exits_2() -> None:
+    proc = subprocess.run(
+        [sys.executable, "-m", "detector.cli"],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 2
+
+
 def test_cli_harness_writes_results_and_summary(tmp_path) -> None:
     results_path = tmp_path / "results.json"
     proc = subprocess.run(

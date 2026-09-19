@@ -25,4 +25,4 @@ COPY vendor/openzeppelin-contracts /app/vendor/openzeppelin-contracts
 
 ENV DETECTOR_OZ_DIR=/app/vendor/openzeppelin-contracts PYTHONPATH=/app PYTHONUNBUFFERED=1
 
-ENTRYPOINT ["python", "-m", "detector.cli", "/input", "/output/results.json"]
+ENTRYPOINT ["python", "-m", "detector.docker_entry"]

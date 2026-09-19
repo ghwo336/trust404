@@ -54,6 +54,65 @@ plus, when the policy moved a finding away from its catalog severity, a note suc
 `downgraded HIGH→MED: role is granted only by a different role`. More than six role-gated
 functions are collapsed into one line with a `<details>` block.
 
+## Submission mode (how the judges run it)
+
+The organizers take a **directory**, analyse every `*.sol` **directly under it** (not subdirectories), and score **exactly one JSON array on stdout**. Logs go to stderr. Bench mode above is unchanged: two positional arguments still write `results.json` + `summary.md`.
+
+```bash
+./run.sh ./cases > out.json
+docker run --rm --network none \
+  -v "$PWD/cases":/input:ro trust404/detector:latest > out.json
+check-jsonschema --schemafile detector/schema/judge.schema.json out.json
+```
+
+`./run.sh` uses `trust404/detector:latest` when that image is present; set `DETECTOR_NO_DOCKER=1` to force the local venv (`python -m detector.cli <dir>`). Docker `ENTRYPOINT` is `python -m detector.docker_entry`: a writable `/output` mount selects bench mode, otherwise submission mode.
+
+Each array element is one input basename:
+
+```json
+{
+  "file": "P3_Honeypot_sol.sol",
+  "verdict": "MALICIOUS",
+  "reasons": [
+    "Settable address gate on transfers — setWhitelist writes whitelist; impact transfer require; An address-to-bool map that a privileged role can write is read in a require/revert on the transfer path: the role can freeze individual holders.",
+    "Role-gated function — setWhitelist gated by owner (eq_state_address); A function is reachable only when msg.sender or tx.origin matches a stored address or an address-to-bool map; evidence for the other rules, never a verdict on its own."
+  ],
+  "evidence": [
+    { "function": "setWhitelist", "line": 32 },
+    { "function": "transfer", "line": 37 },
+    { "function": "setWhitelist", "line": 29 }
+  ],
+  "risk_level": "HIGH",
+  "risk_type": "BACKDOOR",
+  "confidence": 0.8
+}
+```
+
+```json
+{
+  "file": "P4_CappedMint_sol.sol",
+  "verdict": "BENIGN",
+  "reasons": [
+    "privileged controls present but every one is bounded in code or off the transfer path; no unbounded privileged path to user assets",
+    "Role-gated function — mint gated by owner (eq_state_address); A function is reachable only when msg.sender or tx.origin matches a stored address or an address-to-bool map; evidence for the other rules, never a verdict on its own.",
+    "Privileged mint — mint increases bound balance or supply; A privileged function increases a balance or totalSupply outside the constructor: the role can print tokens."
+  ],
+  "evidence": [
+    { "function": "mint", "line": 22 },
+    { "function": "mint", "line": 28 }
+  ],
+  "risk_level": "LOW",
+  "risk_type": "CENTRALIZATION",
+  "confidence": 0.7
+}
+```
+
+`verdict` is upper-case `MALICIOUS|BENIGN|UNCERTAIN`. `MALICIOUS` always carries at least one `evidence` item whose `line` is inside the file. A directory with no top-level `.sol` files prints `[]` (the grader scores an empty array as the whole submission 0; there is nothing else we can emit).
+
+**Budget / timeout.** The grader kills the process at 10 minutes. Submission mode keeps an 8-minute wall budget (`--budget`, default 480 s) and the usual per-file `--timeout` (default 120 s). When the budget is exhausted, remaining files are emitted as `UNCERTAIN` with reason `global time budget exhausted before this file was analysed` and the array is still printed (exit 0). A file that fails to parse or compile is `UNCERTAIN` and the batch continues.
+
+**stdout / stderr.** After argument parsing, submission mode duplicates fd 1, points fd 1 and `sys.stdout` at stderr, and writes the JSON array only to the saved stdout descriptor. solc / crytic-compile / Slither / worker logs therefore cannot corrupt the array. `DETECTOR_LOG_LEVEL` (default `INFO`) controls verbosity on stderr.
+
 ## How a verdict is derived
 
 1. **Findings.** Every rule in the table below is a structural predicate over Slither IR. A
