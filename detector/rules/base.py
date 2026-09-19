@@ -41,6 +41,64 @@ CATALOG: dict[str, tuple[str, str]] = {
 }
 
 
+def node_lines(node) -> tuple[int, ...]:
+    mapping = getattr(node, "source_mapping", None)
+    lines = getattr(mapping, "lines", None) if mapping is not None else None
+    if lines:
+        return tuple(int(item) for item in lines)
+    function = getattr(node, "function", None)
+    fn_map = getattr(function, "source_mapping", None) if function is not None else None
+    fn_lines = getattr(fn_map, "lines", None) if fn_map is not None else None
+    if fn_lines:
+        return tuple(int(item) for item in fn_lines)
+    return ()
+
+
+def function_name(function) -> str:
+    return getattr(function, "name", None) or ""
+
+
+def contract_name(contract) -> str:
+    return getattr(contract, "name", None) or ""
+
+
+def shape_discriminators(ctx, function) -> tuple[str, ...]:
+    from detector.analysis import roles
+    from detector.analysis.privilege import auth_atoms
+
+    discs: list[str] = []
+    atoms = auth_atoms(function)
+    auth = []
+    seen: set[int] = set()
+    for atom in atoms:
+        if id(atom.auth_var) in seen:
+            continue
+        seen.add(id(atom.auth_var))
+        auth.append(atom.auth_var)
+    if auth and all(roles.managed_role(ctx, var) for var in auth):
+        discs.append("managed_role")
+    if roles.library_role(ctx, function):
+        discs.append("library_role")
+    return tuple(discs)
+
+
+def combined_shape_discriminators(ctx, functions) -> tuple[str, ...]:
+    from detector.analysis import roles
+
+    fns = list(functions)
+    discs: list[str] = []
+    if fns:
+        per = [set(shape_discriminators(ctx, fn)) for fn in fns]
+        shared = set.intersection(*per) if per else set()
+        if "managed_role" in shared:
+            discs.append("managed_role")
+        if "library_role" in shared:
+            discs.append("library_role")
+    if roles.issuer_token(ctx):
+        discs.append("issuer_token")
+    return tuple(discs)
+
+
 def make_finding(
     rule_id: str,
     *,
@@ -49,12 +107,13 @@ def make_finding(
     lines: Iterable[int],
     reasoning: str,
     discriminators: tuple[str, ...] = (),
+    severity: str | None = None,
 ) -> Finding:
     family, base_severity = CATALOG[rule_id]
     return Finding(
         rule_id=rule_id,
         family=family,
-        severity=base_severity,
+        severity=severity if severity is not None else base_severity,
         contract=contract,
         function=function,
         lines=tuple(lines),

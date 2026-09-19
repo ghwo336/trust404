@@ -6,9 +6,11 @@ from detector.model import Finding
 from detector.policy import (
     BOUND_DISCRIMINATORS,
     CONCEALMENT_RULES,
+    DOWNGRADE_TABLE,
     SHAPE_DISCRIMINATORS,
     adjust,
     decide,
+    finalize,
 )
 
 
@@ -251,3 +253,86 @@ def test_adjust_unmatched_discriminator_unchanged() -> None:
     )
     out = adjust(finding, concealed=False, downgrade_to={"managed_role": "MED"})
     assert out is finding
+
+
+def test_downgrade_table_matches_spec() -> None:
+    assert DOWNGRADE_TABLE == {
+        "ungate_exists": "MED",
+        "constant_floor": "MED",
+        "bounded_window": "MED",
+        "constant_cap": "MED",
+        "role_separated_cap": "MED",
+        "fee_cap": "INFO",
+        "foreign_only": "INFO",
+        "no_custody": "MED",
+        "managed_role": "MED",
+        "library_role": "MED",
+        "issuer_token": "MED",
+        "representation_switch": "DROP",
+        "one_shot_initializer": "DROP",
+    }
+
+
+def test_finalize_managed_role_high_to_med() -> None:
+    finding = _finding(
+        "EXIT_ADDR_GATE",
+        family="A",
+        severity="HIGH",
+        base_severity="HIGH",
+        discriminators=("managed_role",),
+    )
+    adjusted, shape_applied = finalize([finding])
+    assert shape_applied is True
+    assert len(adjusted) == 1
+    assert adjusted[0].severity == "MED"
+    assert adjusted[0].counts_for_escalation is False
+
+
+def test_finalize_concealment_blocks_downgrade() -> None:
+    hidden = _finding(
+        "OWN_HIDDEN_ROLE",
+        family="D",
+        severity="HIGH",
+        base_severity="HIGH",
+    )
+    gated = _finding(
+        "EXIT_ADDR_GATE",
+        family="A",
+        severity="HIGH",
+        base_severity="HIGH",
+        discriminators=("managed_role",),
+    )
+    adjusted, _shape = finalize([hidden, gated])
+    assert {f.rule_id: f.severity for f in adjusted} == {
+        "OWN_HIDDEN_ROLE": "HIGH",
+        "EXIT_ADDR_GATE": "HIGH",
+    }
+
+
+def test_finalize_drop() -> None:
+    finding = _finding(
+        "BAL_DIRECT_SET",
+        family="B",
+        severity="HIGH",
+        base_severity="HIGH",
+        discriminators=("representation_switch",),
+    )
+    adjusted, shape_applied = finalize([finding])
+    assert adjusted == []
+    assert shape_applied is False
+
+
+def test_finalize_no_expiry_not_downgraded() -> None:
+    finding = _finding(
+        "EXIT_TIME_GATE",
+        family="A",
+        severity="HIGH",
+        base_severity="MED",
+        discriminators=("no_expiry", "managed_role"),
+    )
+    adjusted, shape_applied = finalize([finding])
+    assert len(adjusted) == 1
+    assert adjusted[0].severity == "HIGH"
+    assert adjusted[0] is finding or adjusted[0].severity == "HIGH"
+    assert shape_applied is True
+

@@ -38,6 +38,22 @@ SHAPE_DISCRIMINATORS = frozenset(
     }
 )
 
+DOWNGRADE_TABLE: dict[str, str] = {
+    "ungate_exists": "MED",
+    "constant_floor": "MED",
+    "bounded_window": "MED",
+    "constant_cap": "MED",
+    "role_separated_cap": "MED",
+    "fee_cap": "INFO",
+    "foreign_only": "INFO",
+    "no_custody": "MED",
+    "managed_role": "MED",
+    "library_role": "MED",
+    "issuer_token": "MED",
+    "representation_switch": "DROP",
+    "one_shot_initializer": "DROP",
+}
+
 
 def _downgrade_rank(target: str) -> int:
     match target:
@@ -107,3 +123,28 @@ def decide(
     if any(finding.rule_id == "SLITHER_HIGH_OVERLAY" for finding in findings):
         return "Uncertain", "slither_high"
     return "Benign", ""
+
+
+def finalize(findings: list[Finding]) -> tuple[list[Finding], bool]:
+    concealed = any(
+        finding.rule_id in CONCEALMENT_RULES and finding.severity == "HIGH" for finding in findings
+    )
+    adjusted: list[Finding] = []
+    for finding in findings:
+        if "no_expiry" in finding.discriminators:
+            adjusted.append(finding)
+            continue
+        drop_disc = any(
+            DOWNGRADE_TABLE.get(name) == "DROP" for name in finding.discriminators
+        )
+        if finding.base_severity == "HIGH" or drop_disc:
+            out = adjust(finding, concealed=concealed, downgrade_to=DOWNGRADE_TABLE)
+            if out is not None:
+                adjusted.append(out)
+            continue
+        adjusted.append(finding)
+    shape_applied = any(
+        any(name in SHAPE_DISCRIMINATORS for name in finding.discriminators)
+        for finding in adjusted
+    )
+    return adjusted, shape_applied

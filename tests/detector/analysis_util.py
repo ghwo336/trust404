@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import yaml
+
 from detector.analysis.context import ContractContext
 from detector.engine import target_contracts
-from tests.detector.conftest import TIER3, tier1_sol
+from detector.model import Finding
+from detector.policy import finalize
+from tests.detector.conftest import TIER1, TIER3, tier1_sol
 
 
 def make_ctx(slither_for, path: Path, name: str | None = None) -> ContractContext:
@@ -61,3 +65,21 @@ def svar(ctx: ContractContext, name: str):
     matches = [v for v in pools if v.name == name]
     assert matches, f"state var {name} not found"
     return matches[0]
+
+
+def load_tier1_label(rule_id: str, twin: str) -> dict:
+    path = TIER1 / rule_id / twin / "labels.yaml"
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def load_tier3_label(folder: str) -> dict:
+    path = TIER3 / folder / "labels.yaml"
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def run_and_finalize(ctx: ContractContext, rule_fns) -> list[Finding]:
+    raw: list[Finding] = []
+    for rule in rule_fns:
+        raw.extend(rule(ctx))
+    adjusted, _shape = finalize(raw)
+    return list(adjusted)

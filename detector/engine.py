@@ -11,7 +11,7 @@ from slither import Slither
 from detector.analysis.context import ContractContext
 from detector.compile import CompileError, compile_file
 from detector.model import FileResult, Finding
-from detector.policy import decide
+from detector.policy import decide, finalize
 from detector.rules import RULES
 
 logger = logging.getLogger("detector.engine")
@@ -62,15 +62,33 @@ def _has_implemented_body(contract) -> bool:
     return True
 
 
+def _dedupe_findings(findings: list[Finding]) -> list[Finding]:
+    seen: set[tuple] = set()
+    out: list[Finding] = []
+    for finding in findings:
+        key = (finding.rule_id, finding.function, finding.lines, finding.severity)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(finding)
+    return out
+
+
 def _analyze_in_process(path: str, rel: str) -> dict:
     slither = compile_file(Path(path))
     findings: list[Finding] = []
+    shape_flag = False
     input_root = _input_root(Path(path), rel)
     for contract in target_contracts(slither, Path(path)):
         ctx = ContractContext(slither=slither, contract=contract, input_root=input_root)
+        raw: list[Finding] = []
         for rule in RULES:
-            findings.extend(rule(ctx))
-    verdict, reason = decide(findings)
+            raw.extend(rule(ctx))
+        adjusted, shape_applied = finalize(raw)
+        findings.extend(adjusted)
+        shape_flag = shape_flag or shape_applied
+    findings = _dedupe_findings(findings)
+    verdict, reason = decide(findings, suppress_escalation=shape_flag)
     return FileResult(
         file=rel,
         verdict=verdict,
