@@ -1,0 +1,8 @@
+id: tier1/DRAIN_APPROVAL_PULL/ben
+file: ben.sol
+preferred_verdict: Benign
+accepted_verdicts: [Benign]
+expected_families: [F]
+expected_rule_ids: [DRAIN_APPROVAL_PULL]
+source: spec §6 lookalike — real airdrop credits the caller via transfer, not transferFrom
+solc: "0.8.20"

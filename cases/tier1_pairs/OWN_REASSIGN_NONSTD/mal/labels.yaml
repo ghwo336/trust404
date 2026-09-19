@@ -1,0 +1,13 @@
+id: tier1/OWN_REASSIGN_NONSTD/mal
+file: NonstdInitialize.sol
+preferred_verdict: Malicious
+accepted_verdicts:
+  - Malicious
+expected_families:
+  - D
+expected_rule_ids:
+  - OWN_REASSIGN_NONSTD
+expected_functions:
+  - initialize
+source: spec §7 OWN_REASSIGN_NONSTD; post-deploy initialize() sets owner = msg.sender
+solc: "0.8.20"

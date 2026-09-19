@@ -1,0 +1,10 @@
+id: tier2/pied-piper/real_0x0cb8d0b37c7487b11d57f1f33defa2b1d3cfccfe_sol
+file: real_0x0cb8d0b37c7487b11d57f1f33defa2b1d3cfccfe_sol.sol
+preferred_verdict: Uncertain
+accepted_verdicts:
+- Uncertain
+source: 'pied-piper manifest: Generate/Destroy'
+solc: 0.4.26
+expected_families:
+- B
+notes: non-compiling paper fixture

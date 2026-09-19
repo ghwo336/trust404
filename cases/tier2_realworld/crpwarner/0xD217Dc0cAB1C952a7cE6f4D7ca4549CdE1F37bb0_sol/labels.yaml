@@ -1,0 +1,9 @@
+id: tier2/crpwarner/0xD217Dc0cAB1C952a7cE6f4D7ca4549CdE1F37bb0_sol
+file: 0xD217Dc0cAB1C952a7cE6f4D7ca4549CdE1F37bb0_sol.sol
+preferred_verdict: Malicious
+accepted_verdicts:
+- Malicious
+source: 'crpwarner manifest: Hidden Mint'
+solc: 0.6.12
+expected_families:
+- B

@@ -1,0 +1,9 @@
+id: tier1/VIEW_CALLER_DEPENDENT/mal
+file: mal.sol
+preferred_verdict: Malicious
+accepted_verdicts: [Malicious]
+expected_families: [B]
+expected_rule_ids: [VIEW_CALLER_DEPENDENT]
+expected_functions: [balanceOf]
+source: spec §7 VIEW_CALLER_DEPENDENT — balanceOf branches on msg.sender / owner
+solc: "0.8.20"

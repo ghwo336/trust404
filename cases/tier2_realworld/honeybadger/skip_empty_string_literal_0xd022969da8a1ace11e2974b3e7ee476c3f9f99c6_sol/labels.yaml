@@ -1,0 +1,9 @@
+id: tier2/honeybadger/skip_empty_string_literal_0xd022969da8a1ace11e2974b3e7ee476c3f9f99c6_sol
+file: skip_empty_string_literal_0xd022969da8a1ace11e2974b3e7ee476c3f9f99c6_sol.sol
+preferred_verdict: Malicious
+accepted_verdicts:
+- Malicious
+source: 'honeybadger manifest: skip_empty_string_literal'
+solc: 0.4.26
+expected_families:
+- F

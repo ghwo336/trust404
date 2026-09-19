@@ -1,0 +1,10 @@
+id: tier2/honeybadger/inheritance_disorder_0x94d23f3d0e69da93ed09407b104ea8ed1f20dbda_sol
+file: inheritance_disorder_0x94d23f3d0e69da93ed09407b104ea8ed1f20dbda_sol.sol
+preferred_verdict: Uncertain
+accepted_verdicts:
+- Uncertain
+source: 'honeybadger manifest: inheritance_disorder'
+solc: 0.8.20
+expected_families:
+- F
+notes: non-compiling paper fixture

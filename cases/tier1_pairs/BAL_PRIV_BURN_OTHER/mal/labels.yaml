@@ -1,0 +1,9 @@
+id: tier1/BAL_PRIV_BURN_OTHER/mal
+file: mal.sol
+preferred_verdict: Malicious
+accepted_verdicts: [Malicious]
+expected_families: [B]
+expected_rule_ids: [BAL_PRIV_BURN_OTHER]
+expected_functions: [burnFrom]
+source: spec §7 BAL_PRIV_BURN_OTHER — privileged burn of an arbitrary account, no allowance
+solc: "0.8.20"

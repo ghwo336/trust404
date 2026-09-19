@@ -1,0 +1,10 @@
+id: tier2/pied-piper/injected_FreezeAccount_27_sol
+file: injected_FreezeAccount_27_sol.sol
+preferred_verdict: Uncertain
+accepted_verdicts:
+- Uncertain
+source: 'pied-piper manifest: Disable/Freeze'
+solc: 0.4.26
+expected_families:
+- A
+notes: non-compiling paper fixture

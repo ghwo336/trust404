@@ -1,0 +1,13 @@
+id: tier1/STRUCT_EXTERNAL_GATE/mal
+file: ExternalGate.sol
+preferred_verdict: Uncertain
+accepted_verdicts:
+  - Uncertain
+expected_families:
+  - E
+expected_rule_ids:
+  - STRUCT_EXTERNAL_GATE
+expected_functions:
+  - _transfer
+source: spec §7 STRUCT_EXTERNAL_GATE; _transfer calls owner-settable IGuard(guard).check
+solc: "0.8.20"

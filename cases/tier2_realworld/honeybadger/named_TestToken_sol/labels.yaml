@@ -1,0 +1,10 @@
+id: tier2/honeybadger/named_TestToken_sol
+file: named_TestToken_sol.sol
+preferred_verdict: Uncertain
+accepted_verdicts:
+- Uncertain
+source: 'honeybadger manifest: honeypot'
+solc: 0.8.20
+expected_families:
+- F
+notes: non-compiling paper fixture

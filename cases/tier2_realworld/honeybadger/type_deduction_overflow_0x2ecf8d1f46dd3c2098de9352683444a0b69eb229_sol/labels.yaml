@@ -1,0 +1,9 @@
+id: tier2/honeybadger/type_deduction_overflow_0x2ecf8d1f46dd3c2098de9352683444a0b69eb229_sol
+file: type_deduction_overflow_0x2ecf8d1f46dd3c2098de9352683444a0b69eb229_sol.sol
+preferred_verdict: Malicious
+accepted_verdicts:
+- Malicious
+source: 'honeybadger manifest: type_deduction_overflow'
+solc: 0.4.26
+expected_families:
+- F

@@ -1,0 +1,10 @@
+id: tier2/pied-piper/real_0xf3b450002c7bc300ea03c9463d8e8ba7f821b7c6_sol
+file: real_0xf3b450002c7bc300ea03c9463d8e8ba7f821b7c6_sol.sol
+preferred_verdict: Uncertain
+accepted_verdicts:
+- Uncertain
+source: 'pied-piper manifest: Disable/Freeze'
+solc: 0.4.26
+expected_families:
+- A
+notes: non-compiling paper fixture

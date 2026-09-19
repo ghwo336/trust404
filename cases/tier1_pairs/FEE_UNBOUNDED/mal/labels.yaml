@@ -1,0 +1,9 @@
+id: tier1/FEE_UNBOUNDED/mal
+file: mal.sol
+preferred_verdict: Malicious
+accepted_verdicts: [Malicious]
+expected_families: [A]
+expected_rule_ids: [FEE_UNBOUNDED]
+expected_functions: [setFee, _transfer]
+source: spec §7 FEE_UNBOUNDED — privileged fee feeds amount with no cap (can be 100%)
+solc: "0.8.20"

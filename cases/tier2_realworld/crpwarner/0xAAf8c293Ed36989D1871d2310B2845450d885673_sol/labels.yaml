@@ -1,0 +1,8 @@
+id: tier2/crpwarner/0xAAf8c293Ed36989D1871d2310B2845450d885673_sol
+file: 0xAAf8c293Ed36989D1871d2310B2845450d885673_sol.sol
+preferred_verdict: Malicious
+accepted_verdicts:
+- Malicious
+source: 'crpwarner manifest: '
+solc: 0.8.24
+notes: 'unknown category: '

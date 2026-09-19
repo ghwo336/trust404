@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trust404.local/baybench/result.schema.json",
+  "title": "BAYBENCH tool result",
+  "type": "object",
+  "required": ["tool", "results"],
+  "additionalProperties": false,
+  "properties": {
+    "tool": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "version": {"type": "string"}
+      }
+    },
+    "results": {"type": "array", "items": {"$ref": "#/$defs/result"}}
+  },
+  "$defs": {
+    "verdict": {"enum": ["Benign", "Malicious", "Uncertain"]},
+    "family": {"enum": ["A", "B", "C", "D", "E", "F", "G"]},
+    "severity": {"enum": ["HIGH", "MED", "INFO"]},
+    "result": {
+      "type": "object",
+      "required": ["file", "verdict"],
+      "additionalProperties": false,
+      "properties": {
+        "file": {"type": "string", "minLength": 1},
+        "verdict": {"$ref": "#/$defs/verdict"},
+        "reason": {"type": "string"},
+        "findings": {"type": "array", "items": {"$ref": "#/$defs/finding"}}
+      }
+    },
+    "finding": {
+      "type": "object",
+      "required": ["rule_id", "family", "severity"],
+      "additionalProperties": false,
+      "properties": {
+        "rule_id": {"type": "string", "minLength": 1},
+        "family": {"$ref": "#/$defs/family"},
+        "severity": {"$ref": "#/$defs/severity"},
+        "contract": {"type": "string"},
+        "function": {"type": "string"},
+        "lines": {"type": "array", "items": {"type": "integer", "minimum": 0}},
+        "reasoning": {"type": "string"}
+      }
+    }
+  }
+}

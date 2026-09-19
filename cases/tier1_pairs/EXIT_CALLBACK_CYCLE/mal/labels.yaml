@@ -1,0 +1,9 @@
+id: tier1/EXIT_CALLBACK_CYCLE/mal
+file: mal.sol
+preferred_verdict: Malicious
+accepted_verdicts: [Malicious]
+expected_families: [A]
+expected_rule_ids: [EXIT_CALLBACK_CYCLE]
+expected_functions: [_transfer]
+source: spec §7 EXIT_CALLBACK_CYCLE — sell path calls owner-settable IHook then requires amount<=owner-writable sellLimit
+solc: "0.8.20"

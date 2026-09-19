@@ -1,0 +1,8 @@
+id: tier2/crpwarner/0x6b5e9e55921e5e412cF1002599c05d4428cF50c5_sol
+file: 0x6b5e9e55921e5e412cF1002599c05d4428cF50c5_sol.sol
+preferred_verdict: Uncertain
+accepted_verdicts:
+- Uncertain
+source: 'crpwarner manifest: '
+solc: 0.8.20
+notes: 'unknown category: ; non-compiling paper fixture'

@@ -1,0 +1,2156 @@
+{
+  "tool": "probe_network",
+  "n_cases": 69,
+  "scoring": {
+    "tool": "probe_network",
+    "tool_version": "0.1.0",
+    "n_cases": 69,
+    "overall": {
+      "n_cases": 69,
+      "mean_verdict_score": 0.6159,
+      "family_recall": 0.0,
+      "rule_recall": 0.0,
+      "high_fp_rate": 0.0,
+      "evidence_hit_rate": 0.0,
+      "uncertain_rate": 1.0,
+      "missing_count": 0,
+      "compile_fail_count": 0,
+      "runtime_p50": 0.3889,
+      "runtime_p95": 0.3889
+    },
+    "weighted_score": 0.6742,
+    "per_tier": {
+      "tier1_pairs": {
+        "n_cases": 61,
+        "mean_verdict_score": 0.5984,
+        "family_recall": 0.0,
+        "rule_recall": 0.0,
+        "high_fp_rate": 0.0,
+        "evidence_hit_rate": 0.0,
+        "uncertain_rate": 1.0,
+        "missing_count": 0,
+        "compile_fail_count": 0,
+        "runtime_p50": null,
+        "runtime_p95": null
+      },
+      "tier3_benign_risky": {
+        "n_cases": 8,
+        "mean_verdict_score": 0.75,
+        "family_recall": null,
+        "rule_recall": null,
+        "high_fp_rate": 0.0,
+        "evidence_hit_rate": null,
+        "uncertain_rate": 1.0,
+        "missing_count": 0,
+        "compile_fail_count": 0,
+        "runtime_p50": null,
+        "runtime_p95": null
+      }
+    },
+    "per_family": {
+      "A": {
+        "n_cases": 8,
+        "mean_verdict_score": 0.5,
+        "family_recall": 0.0,
+        "rule_recall": 0.0,
+        "high_fp_rate": null,
+        "evidence_hit_rate": 0.0,
+        "uncertain_rate": 1.0,
+        "missing_count": 0,
+        "compile_fail_count": 0,
+        "runtime_p50": null,
+        "runtime_p95": null
+      },
+      "B": {
+        "n_cases": 5,
+        "mean_verdict_score": 0.5,
+        "family_recall": 0.0,
+        "rule_recall": 0.0,
+        "high_fp_rate": null,
+        "evidence_hit_rate": 0.0,
+        "uncertain_rate": 1.0,
+        "missing_count": 0,
+        "compile_fail_count": 0,
+        "runtime_p50": null,
+        "runtime_p95": null
+      },
+      "C": {
+        "n_cases": 3,
+        "mean_verdict_score": 0.5,
+        "family_recall": 0.0,
+        "rule_recall": 0.0,
+        "high_fp_rate": null,
+        "evidence_hit_rate": 0.0,
+        "uncertain_rate": 1.0,
+        "missing_count": 0,
+        "compile_fail_count": 0,
+        "runtime_p50": null,
+        "runtime_p95": null
+      },
+      "D": {
+        "n_cases": 3,
+        "mean_verdict_score": 0.5,
+        "family_recall": 0.0,
+        "rule_recall": 0.0,
+        "high_fp_rate": null,
+        "evidence_hit_rate": 0.0,
+        "uncertain_rate": 1.0,
+        "missing_count": 0,
+        "compile_fail_count": 0,
+        "runtime_p50": null,
+        "runtime_p95": null
+      },
+      "E": {
+        "n_cases": 2,
+        "mean_verdict_score": 0.5,
+        "family_recall": 0.0,
+        "rule_recall": 0.0,
+        "high_fp_rate": null,
+        "evidence_hit_rate": 0.0,
+        "uncertain_rate": 1.0,
+        "missing_count": 0,
+        "compile_fail_count": 0,
+        "runtime_p50": null,
+        "runtime_p95": null
+      },
+      "F": {
+        "n_cases": 1,
+        "mean_verdict_score": 0.5,
+        "family_recall": 0.0,
+        "rule_recall": 0.0,
+        "high_fp_rate": null,
+        "evidence_hit_rate": 0.0,
+        "uncertain_rate": 1.0,
+        "missing_count": 0,
+        "compile_fail_count": 0,
+        "runtime_p50": null,
+        "runtime_p95": null
+      },
+      "G": {
+        "n_cases": 0,
+        "mean_verdict_score": 0.0,
+        "family_recall": null,
+        "rule_recall": null,
+        "high_fp_rate": null,
+        "evidence_hit_rate": null,
+        "uncertain_rate": 0.0,
+        "missing_count": 0,
+        "compile_fail_count": 0,
+        "runtime_p50": null,
+        "runtime_p95": null
+      }
+    },
+    "extra_results": [
+      "tier1/_harness/multi_file/Helper.sol"
+    ],
+    "cases": [
+      {
+        "id": "tier1/BAL_DIRECT_SET/ben",
+        "tier": "tier1_pairs",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/BAL_DIRECT_SET/mal",
+        "tier": "tier1_pairs",
+        "preferred": "Malicious",
+        "accepted": [
+          "Malicious"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": false,
+        "rule_hit": false,
+        "evidence_hit": false,
+        "high_fp": null,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/BAL_PRIV_BURN_OTHER/ben",
+        "tier": "tier1_pairs",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/BAL_PRIV_BURN_OTHER/mal",
+        "tier": "tier1_pairs",
+        "preferred": "Malicious",
+        "accepted": [
+          "Malicious"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": false,
+        "rule_hit": false,
+        "evidence_hit": false,
+        "high_fp": null,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/BAL_PRIV_MINT/ben",
+        "tier": "tier1_pairs",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign",
+          "Uncertain"
+        ],
+        "actual": "Uncertain",
+        "score": 0.75,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/BAL_PRIV_MINT/mal",
+        "tier": "tier1_pairs",
+        "preferred": "Malicious",
+        "accepted": [
+          "Malicious"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": false,
+        "rule_hit": false,
+        "evidence_hit": false,
+        "high_fp": null,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/BAL_TRANSFER_HIDDEN_MINT/ben",
+        "tier": "tier1_pairs",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/BAL_TRANSFER_HIDDEN_MINT/mal",
+        "tier": "tier1_pairs",
+        "preferred": "Malicious",
+        "accepted": [
+          "Malicious"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": false,
+        "rule_hit": false,
+        "evidence_hit": false,
+        "high_fp": null,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/DRAIN_APPROVAL_PULL/ben",
+        "tier": "tier1_pairs",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/DRAIN_APPROVAL_PULL/mal",
+        "tier": "tier1_pairs",
+        "preferred": "Malicious",
+        "accepted": [
+          "Malicious"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": false,
+        "rule_hit": false,
+        "evidence_hit": false,
+        "high_fp": null,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/EXIT_ADDR_GATE/ben",
+        "tier": "tier1_pairs",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/EXIT_ADDR_GATE/mal",
+        "tier": "tier1_pairs",
+        "preferred": "Malicious",
+        "accepted": [
+          "Malicious"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": false,
+        "rule_hit": false,
+        "evidence_hit": false,
+        "high_fp": null,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/EXIT_AMOUNT_LIMIT/ben",
+        "tier": "tier1_pairs",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign",
+          "Uncertain"
+        ],
+        "actual": "Uncertain",
+        "score": 0.75,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/EXIT_AMOUNT_LIMIT/mal",
+        "tier": "tier1_pairs",
+        "preferred": "Malicious",
+        "accepted": [
+          "Malicious"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": false,
+        "rule_hit": false,
+        "evidence_hit": false,
+        "high_fp": null,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/EXIT_CALLBACK_CYCLE/ben",
+        "tier": "tier1_pairs",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/EXIT_CALLBACK_CYCLE/mal",
+        "tier": "tier1_pairs",
+        "preferred": "Malicious",
+        "accepted": [
+          "Malicious"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": false,
+        "rule_hit": false,
+        "evidence_hit": false,
+        "high_fp": null,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/EXIT_GLOBAL_SWITCH/ben",
+        "tier": "tier1_pairs",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign",
+          "Uncertain"
+        ],
+        "actual": "Uncertain",
+        "score": 0.75,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/EXIT_GLOBAL_SWITCH/mal",
+        "tier": "tier1_pairs",
+        "preferred": "Malicious",
+        "accepted": [
+          "Malicious"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": false,
+        "rule_hit": false,
+        "evidence_hit": false,
+        "high_fp": null,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/EXIT_SELL_ONLY/ben",
+        "tier": "tier1_pairs",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/EXIT_SELL_ONLY/mal",
+        "tier": "tier1_pairs",
+        "preferred": "Malicious",
+        "accepted": [
+          "Malicious"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": false,
+        "rule_hit": false,
+        "evidence_hit": false,
+        "high_fp": null,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/EXIT_TIME_GATE/ben",
+        "tier": "tier1_pairs",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign",
+          "Uncertain"
+        ],
+        "actual": "Uncertain",
+        "score": 0.75,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/EXIT_TIME_GATE/mal",
+        "tier": "tier1_pairs",
+        "preferred": "Malicious",
+        "accepted": [
+          "Malicious"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": false,
+        "rule_hit": false,
+        "evidence_hit": false,
+        "high_fp": null,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/FEE_ADDR_MUTABLE/ben",
+        "tier": "tier1_pairs",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/FEE_ADDR_MUTABLE/mal",
+        "tier": "tier1_pairs",
+        "preferred": "Uncertain",
+        "accepted": [
+          "Uncertain",
+          "Malicious"
+        ],
+        "actual": "Uncertain",
+        "score": 1.0,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": false,
+        "high_fp": null,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/FEE_UNBOUNDED/ben",
+        "tier": "tier1_pairs",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/FEE_UNBOUNDED/mal",
+        "tier": "tier1_pairs",
+        "preferred": "Malicious",
+        "accepted": [
+          "Malicious"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": false,
+        "rule_hit": false,
+        "evidence_hit": false,
+        "high_fp": null,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/HONEYPOT_LEGACY/ben",
+        "tier": "tier1_pairs",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/HONEYPOT_LEGACY/mal",
+        "tier": "tier1_pairs",
+        "preferred": "Uncertain",
+        "accepted": [
+          "Uncertain",
+          "Malicious"
+        ],
+        "actual": "Uncertain",
+        "score": 1.0,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": false,
+        "high_fp": null,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/LEAK_ARBITRARY_TRANSFERFROM/ben",
+        "tier": "tier1_pairs",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/LEAK_ARBITRARY_TRANSFERFROM/mal",
+        "tier": "tier1_pairs",
+        "preferred": "Malicious",
+        "accepted": [
+          "Malicious"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": false,
+        "rule_hit": false,
+        "evidence_hit": false,
+        "high_fp": null,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/LEAK_EXEMPT_PATH/ben",
+        "tier": "tier1_pairs",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/LEAK_EXEMPT_PATH/mal",
+        "tier": "tier1_pairs",
+        "preferred": "Malicious",
+        "accepted": [
+          "Malicious"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": false,
+        "rule_hit": false,
+        "evidence_hit": false,
+        "high_fp": null,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/LEAK_PRIV_SWEEP/ben",
+        "tier": "tier1_pairs",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign",
+          "Uncertain"
+        ],
+        "actual": "Uncertain",
+        "score": 0.75,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/LEAK_PRIV_SWEEP/mal",
+        "tier": "tier1_pairs",
+        "preferred": "Malicious",
+        "accepted": [
+          "Malicious"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": false,
+        "rule_hit": false,
+        "evidence_hit": false,
+        "high_fp": null,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/OWN_FAKE_RENOUNCE/ben",
+        "tier": "tier1_pairs",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/OWN_FAKE_RENOUNCE/mal",
+        "tier": "tier1_pairs",
+        "preferred": "Malicious",
+        "accepted": [
+          "Malicious"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": false,
+        "rule_hit": false,
+        "evidence_hit": false,
+        "high_fp": null,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/OWN_HIDDEN_ROLE/ben",
+        "tier": "tier1_pairs",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/OWN_HIDDEN_ROLE/mal",
+        "tier": "tier1_pairs",
+        "preferred": "Malicious",
+        "accepted": [
+          "Malicious"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": false,
+        "rule_hit": false,
+        "evidence_hit": false,
+        "high_fp": null,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/OWN_REASSIGN_NONSTD/ben",
+        "tier": "tier1_pairs",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/OWN_REASSIGN_NONSTD/mal",
+        "tier": "tier1_pairs",
+        "preferred": "Malicious",
+        "accepted": [
+          "Malicious"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": false,
+        "rule_hit": false,
+        "evidence_hit": false,
+        "high_fp": null,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/OWN_TX_ORIGIN/ben",
+        "tier": "tier1_pairs",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/OWN_TX_ORIGIN/mal",
+        "tier": "tier1_pairs",
+        "preferred": "Uncertain",
+        "accepted": [
+          "Uncertain",
+          "Malicious"
+        ],
+        "actual": "Uncertain",
+        "score": 1.0,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": false,
+        "high_fp": null,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/PONZI_SHAPE/ben",
+        "tier": "tier1_pairs",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/PONZI_SHAPE/mal",
+        "tier": "tier1_pairs",
+        "preferred": "Uncertain",
+        "accepted": [
+          "Uncertain",
+          "Malicious"
+        ],
+        "actual": "Uncertain",
+        "score": 1.0,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": false,
+        "high_fp": null,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/PRIV_ROLE/ben",
+        "tier": "tier1_pairs",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign",
+          "Uncertain"
+        ],
+        "actual": "Uncertain",
+        "score": 0.75,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/PRIV_ROLE/mal",
+        "tier": "tier1_pairs",
+        "preferred": "Malicious",
+        "accepted": [
+          "Malicious"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": false,
+        "rule_hit": false,
+        "evidence_hit": false,
+        "high_fp": null,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/SLITHER_HIGH_OVERLAY/ben",
+        "tier": "tier1_pairs",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/SLITHER_HIGH_OVERLAY/mal",
+        "tier": "tier1_pairs",
+        "preferred": "Uncertain",
+        "accepted": [
+          "Uncertain",
+          "Malicious"
+        ],
+        "actual": "Uncertain",
+        "score": 1.0,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": false,
+        "high_fp": null,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/STRUCT_DELEGATECALL_SETTABLE/ben",
+        "tier": "tier1_pairs",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/STRUCT_DELEGATECALL_SETTABLE/mal",
+        "tier": "tier1_pairs",
+        "preferred": "Malicious",
+        "accepted": [
+          "Malicious"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": false,
+        "rule_hit": false,
+        "evidence_hit": false,
+        "high_fp": null,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/STRUCT_EXTERNAL_GATE/ben",
+        "tier": "tier1_pairs",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/STRUCT_EXTERNAL_GATE/mal",
+        "tier": "tier1_pairs",
+        "preferred": "Uncertain",
+        "accepted": [
+          "Uncertain"
+        ],
+        "actual": "Uncertain",
+        "score": 1.0,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": false,
+        "high_fp": null,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/STRUCT_PROXY_EOA_ADMIN/ben",
+        "tier": "tier1_pairs",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/STRUCT_PROXY_EOA_ADMIN/mal",
+        "tier": "tier1_pairs",
+        "preferred": "Uncertain",
+        "accepted": [
+          "Uncertain",
+          "Malicious"
+        ],
+        "actual": "Uncertain",
+        "score": 1.0,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": false,
+        "high_fp": null,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/STRUCT_SELFDESTRUCT/ben",
+        "tier": "tier1_pairs",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/STRUCT_SELFDESTRUCT/mal",
+        "tier": "tier1_pairs",
+        "preferred": "Malicious",
+        "accepted": [
+          "Malicious"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": false,
+        "rule_hit": false,
+        "evidence_hit": false,
+        "high_fp": null,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/VIEW_CALLER_DEPENDENT/ben",
+        "tier": "tier1_pairs",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/VIEW_CALLER_DEPENDENT/mal",
+        "tier": "tier1_pairs",
+        "preferred": "Malicious",
+        "accepted": [
+          "Malicious"
+        ],
+        "actual": "Uncertain",
+        "score": 0.5,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": false,
+        "rule_hit": false,
+        "evidence_hit": false,
+        "high_fp": null,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/_harness/compile_fail",
+        "tier": "tier1_pairs",
+        "preferred": "Uncertain",
+        "accepted": [
+          "Uncertain"
+        ],
+        "actual": "Uncertain",
+        "score": 1.0,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": null,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/_harness/multi_file",
+        "tier": "tier1_pairs",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign",
+          "Uncertain"
+        ],
+        "actual": "Uncertain",
+        "score": 0.75,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier1/_harness/oz_import",
+        "tier": "tier1_pairs",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign",
+          "Uncertain"
+        ],
+        "actual": "Uncertain",
+        "score": 0.75,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier3/bancor_smarttoken",
+        "tier": "tier3_benign_risky",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign",
+          "Uncertain"
+        ],
+        "actual": "Uncertain",
+        "score": 0.75,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier3/erc20_foreign_rescue",
+        "tier": "tier3_benign_risky",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign",
+          "Uncertain"
+        ],
+        "actual": "Uncertain",
+        "score": 0.75,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier3/lido_ldo_minime",
+        "tier": "tier3_benign_risky",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign",
+          "Uncertain"
+        ],
+        "actual": "Uncertain",
+        "score": 0.75,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier3/oz_erc20_pausable_ownable",
+        "tier": "tier3_benign_risky",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign",
+          "Uncertain"
+        ],
+        "actual": "Uncertain",
+        "score": 0.75,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier3/oz_erc20capped_accesscontrol",
+        "tier": "tier3_benign_risky",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign",
+          "Uncertain"
+        ],
+        "actual": "Uncertain",
+        "score": 0.75,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier3/oz_erc20permit",
+        "tier": "tier3_benign_risky",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign",
+          "Uncertain"
+        ],
+        "actual": "Uncertain",
+        "score": 0.75,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier3/reflection_token",
+        "tier": "tier3_benign_risky",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign",
+          "Uncertain"
+        ],
+        "actual": "Uncertain",
+        "score": 0.75,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [],
+        "fired_families": []
+      },
+      {
+        "id": "tier3/usdc_fiattoken",
+        "tier": "tier3_benign_risky",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign",
+          "Uncertain"
+        ],
+        "actual": "Uncertain",
+        "score": 0.75,
+        "missing": false,
+        "reason": "network_unreachable",
+        "uncertain": true,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [],
+        "fired_families": []
+      }
+    ]
+  },
+  "coverage": {
+    "families": {
+      "A": {
+        "n_cases": 16,
+        "n_malicious": 8,
+        "n_benign": 8
+      },
+      "B": {
+        "n_cases": 10,
+        "n_malicious": 5,
+        "n_benign": 5
+      },
+      "C": {
+        "n_cases": 10,
+        "n_malicious": 3,
+        "n_benign": 5
+      },
+      "D": {
+        "n_cases": 8,
+        "n_malicious": 3,
+        "n_benign": 4
+      },
+      "E": {
+        "n_cases": 8,
+        "n_malicious": 2,
+        "n_benign": 4
+      },
+      "F": {
+        "n_cases": 4,
+        "n_malicious": 1,
+        "n_benign": 2
+      },
+      "G": {
+        "n_cases": 2,
+        "n_malicious": 0,
+        "n_benign": 1
+      }
+    },
+    "rules": {
+      "PRIV_ROLE": {
+        "family": "A",
+        "n_cases": 2
+      },
+      "EXIT_ADDR_GATE": {
+        "family": "A",
+        "n_cases": 1
+      },
+      "EXIT_GLOBAL_SWITCH": {
+        "family": "A",
+        "n_cases": 1
+      },
+      "EXIT_AMOUNT_LIMIT": {
+        "family": "A",
+        "n_cases": 1
+      },
+      "EXIT_TIME_GATE": {
+        "family": "A",
+        "n_cases": 1
+      },
+      "EXIT_SELL_ONLY": {
+        "family": "A",
+        "n_cases": 1
+      },
+      "EXIT_CALLBACK_CYCLE": {
+        "family": "A",
+        "n_cases": 1
+      },
+      "FEE_UNBOUNDED": {
+        "family": "A",
+        "n_cases": 1
+      },
+      "FEE_ADDR_MUTABLE": {
+        "family": "C",
+        "n_cases": 1
+      },
+      "BAL_PRIV_MINT": {
+        "family": "B",
+        "n_cases": 1
+      },
+      "BAL_PRIV_BURN_OTHER": {
+        "family": "B",
+        "n_cases": 1
+      },
+      "BAL_DIRECT_SET": {
+        "family": "B",
+        "n_cases": 1
+      },
+      "BAL_TRANSFER_HIDDEN_MINT": {
+        "family": "B",
+        "n_cases": 1
+      },
+      "VIEW_CALLER_DEPENDENT": {
+        "family": "B",
+        "n_cases": 1
+      },
+      "LEAK_ARBITRARY_TRANSFERFROM": {
+        "family": "C",
+        "n_cases": 1
+      },
+      "LEAK_EXEMPT_PATH": {
+        "family": "C",
+        "n_cases": 1
+      },
+      "LEAK_PRIV_SWEEP": {
+        "family": "C",
+        "n_cases": 1
+      },
+      "OWN_HIDDEN_ROLE": {
+        "family": "D",
+        "n_cases": 2
+      },
+      "OWN_FAKE_RENOUNCE": {
+        "family": "D",
+        "n_cases": 2
+      },
+      "OWN_REASSIGN_NONSTD": {
+        "family": "D",
+        "n_cases": 2
+      },
+      "OWN_TX_ORIGIN": {
+        "family": "D",
+        "n_cases": 2
+      },
+      "STRUCT_EXTERNAL_GATE": {
+        "family": "E",
+        "n_cases": 2
+      },
+      "STRUCT_DELEGATECALL_SETTABLE": {
+        "family": "E",
+        "n_cases": 2
+      },
+      "STRUCT_SELFDESTRUCT": {
+        "family": "E",
+        "n_cases": 2
+      },
+      "STRUCT_PROXY_EOA_ADMIN": {
+        "family": "E",
+        "n_cases": 2
+      },
+      "DRAIN_APPROVAL_PULL": {
+        "family": "F",
+        "n_cases": 2
+      },
+      "HONEYPOT_LEGACY": {
+        "family": "F",
+        "n_cases": 2
+      },
+      "PONZI_SHAPE": {
+        "family": "G",
+        "n_cases": 2
+      },
+      "SLITHER_HIGH_OVERLAY": {
+        "family": "C",
+        "n_cases": 2
+      }
+    },
+    "families_zero_cases": [],
+    "rules_zero_cases": [],
+    "unknown_rule_ids": [],
+    "unknown_families": [],
+    "tier1_pairs": {
+      "PRIV_ROLE": {
+        "malicious": 1,
+        "benign": 1
+      },
+      "EXIT_ADDR_GATE": {
+        "malicious": 1,
+        "benign": 1
+      },
+      "EXIT_GLOBAL_SWITCH": {
+        "malicious": 1,
+        "benign": 1
+      },
+      "EXIT_AMOUNT_LIMIT": {
+        "malicious": 1,
+        "benign": 1
+      },
+      "EXIT_TIME_GATE": {
+        "malicious": 1,
+        "benign": 1
+      },
+      "EXIT_SELL_ONLY": {
+        "malicious": 1,
+        "benign": 1
+      },
+      "EXIT_CALLBACK_CYCLE": {
+        "malicious": 1,
+        "benign": 1
+      },
+      "FEE_UNBOUNDED": {
+        "malicious": 1,
+        "benign": 1
+      },
+      "FEE_ADDR_MUTABLE": {
+        "malicious": 1,
+        "benign": 1
+      },
+      "BAL_PRIV_MINT": {
+        "malicious": 1,
+        "benign": 1
+      },
+      "BAL_PRIV_BURN_OTHER": {
+        "malicious": 1,
+        "benign": 1
+      },
+      "BAL_DIRECT_SET": {
+        "malicious": 1,
+        "benign": 1
+      },
+      "BAL_TRANSFER_HIDDEN_MINT": {
+        "malicious": 1,
+        "benign": 1
+      },
+      "VIEW_CALLER_DEPENDENT": {
+        "malicious": 1,
+        "benign": 1
+      },
+      "LEAK_ARBITRARY_TRANSFERFROM": {
+        "malicious": 1,
+        "benign": 1
+      },
+      "LEAK_EXEMPT_PATH": {
+        "malicious": 1,
+        "benign": 1
+      },
+      "LEAK_PRIV_SWEEP": {
+        "malicious": 1,
+        "benign": 1
+      },
+      "OWN_HIDDEN_ROLE": {
+        "malicious": 1,
+        "benign": 1
+      },
+      "OWN_FAKE_RENOUNCE": {
+        "malicious": 1,
+        "benign": 1
+      },
+      "OWN_REASSIGN_NONSTD": {
+        "malicious": 1,
+        "benign": 1
+      },
+      "OWN_TX_ORIGIN": {
+        "malicious": 1,
+        "benign": 1
+      },
+      "STRUCT_EXTERNAL_GATE": {
+        "malicious": 1,
+        "benign": 1
+      },
+      "STRUCT_DELEGATECALL_SETTABLE": {
+        "malicious": 1,
+        "benign": 1
+      },
+      "STRUCT_SELFDESTRUCT": {
+        "malicious": 1,
+        "benign": 1
+      },
+      "STRUCT_PROXY_EOA_ADMIN": {
+        "malicious": 1,
+        "benign": 1
+      },
+      "DRAIN_APPROVAL_PULL": {
+        "malicious": 1,
+        "benign": 1
+      },
+      "HONEYPOT_LEGACY": {
+        "malicious": 1,
+        "benign": 1
+      },
+      "PONZI_SHAPE": {
+        "malicious": 1,
+        "benign": 1
+      },
+      "SLITHER_HIGH_OVERLAY": {
+        "malicious": 1,
+        "benign": 1
+      }
+    },
+    "tier1_unknown_rule_dirs": [],
+    "rules_missing_pair": [],
+    "n_cases": 69,
+    "per_tier": {
+      "tier1_pairs": 61,
+      "tier3_benign_risky": 8
+    }
+  },
+  "gaps": [
+    {
+      "id": "tier1/BAL_DIRECT_SET/mal",
+      "tier": "tier1_pairs",
+      "reason": "no_expected_rule",
+      "verdict": "Uncertain",
+      "expected_rule_ids": [
+        "BAL_DIRECT_SET"
+      ],
+      "expected_families": [
+        "B"
+      ],
+      "fired_rule_ids": [],
+      "fired_families": []
+    },
+    {
+      "id": "tier1/BAL_PRIV_BURN_OTHER/mal",
+      "tier": "tier1_pairs",
+      "reason": "no_expected_rule",
+      "verdict": "Uncertain",
+      "expected_rule_ids": [
+        "BAL_PRIV_BURN_OTHER"
+      ],
+      "expected_families": [
+        "B"
+      ],
+      "fired_rule_ids": [],
+      "fired_families": []
+    },
+    {
+      "id": "tier1/BAL_PRIV_MINT/mal",
+      "tier": "tier1_pairs",
+      "reason": "no_expected_rule",
+      "verdict": "Uncertain",
+      "expected_rule_ids": [
+        "BAL_PRIV_MINT"
+      ],
+      "expected_families": [
+        "B"
+      ],
+      "fired_rule_ids": [],
+      "fired_families": []
+    },
+    {
+      "id": "tier1/BAL_TRANSFER_HIDDEN_MINT/mal",
+      "tier": "tier1_pairs",
+      "reason": "no_expected_rule",
+      "verdict": "Uncertain",
+      "expected_rule_ids": [
+        "BAL_TRANSFER_HIDDEN_MINT"
+      ],
+      "expected_families": [
+        "B"
+      ],
+      "fired_rule_ids": [],
+      "fired_families": []
+    },
+    {
+      "id": "tier1/DRAIN_APPROVAL_PULL/mal",
+      "tier": "tier1_pairs",
+      "reason": "no_expected_rule",
+      "verdict": "Uncertain",
+      "expected_rule_ids": [
+        "DRAIN_APPROVAL_PULL"
+      ],
+      "expected_families": [
+        "F"
+      ],
+      "fired_rule_ids": [],
+      "fired_families": []
+    },
+    {
+      "id": "tier1/EXIT_ADDR_GATE/mal",
+      "tier": "tier1_pairs",
+      "reason": "no_expected_rule",
+      "verdict": "Uncertain",
+      "expected_rule_ids": [
+        "EXIT_ADDR_GATE"
+      ],
+      "expected_families": [
+        "A"
+      ],
+      "fired_rule_ids": [],
+      "fired_families": []
+    },
+    {
+      "id": "tier1/EXIT_AMOUNT_LIMIT/mal",
+      "tier": "tier1_pairs",
+      "reason": "no_expected_rule",
+      "verdict": "Uncertain",
+      "expected_rule_ids": [
+        "EXIT_AMOUNT_LIMIT"
+      ],
+      "expected_families": [
+        "A"
+      ],
+      "fired_rule_ids": [],
+      "fired_families": []
+    },
+    {
+      "id": "tier1/EXIT_CALLBACK_CYCLE/mal",
+      "tier": "tier1_pairs",
+      "reason": "no_expected_rule",
+      "verdict": "Uncertain",
+      "expected_rule_ids": [
+        "EXIT_CALLBACK_CYCLE"
+      ],
+      "expected_families": [
+        "A"
+      ],
+      "fired_rule_ids": [],
+      "fired_families": []
+    },
+    {
+      "id": "tier1/EXIT_GLOBAL_SWITCH/mal",
+      "tier": "tier1_pairs",
+      "reason": "no_expected_rule",
+      "verdict": "Uncertain",
+      "expected_rule_ids": [
+        "EXIT_GLOBAL_SWITCH"
+      ],
+      "expected_families": [
+        "A"
+      ],
+      "fired_rule_ids": [],
+      "fired_families": []
+    },
+    {
+      "id": "tier1/EXIT_SELL_ONLY/mal",
+      "tier": "tier1_pairs",
+      "reason": "no_expected_rule",
+      "verdict": "Uncertain",
+      "expected_rule_ids": [
+        "EXIT_SELL_ONLY"
+      ],
+      "expected_families": [
+        "A"
+      ],
+      "fired_rule_ids": [],
+      "fired_families": []
+    },
+    {
+      "id": "tier1/EXIT_TIME_GATE/mal",
+      "tier": "tier1_pairs",
+      "reason": "no_expected_rule",
+      "verdict": "Uncertain",
+      "expected_rule_ids": [
+        "EXIT_TIME_GATE"
+      ],
+      "expected_families": [
+        "A"
+      ],
+      "fired_rule_ids": [],
+      "fired_families": []
+    },
+    {
+      "id": "tier1/FEE_UNBOUNDED/mal",
+      "tier": "tier1_pairs",
+      "reason": "no_expected_rule",
+      "verdict": "Uncertain",
+      "expected_rule_ids": [
+        "FEE_UNBOUNDED"
+      ],
+      "expected_families": [
+        "A"
+      ],
+      "fired_rule_ids": [],
+      "fired_families": []
+    },
+    {
+      "id": "tier1/LEAK_ARBITRARY_TRANSFERFROM/mal",
+      "tier": "tier1_pairs",
+      "reason": "no_expected_rule",
+      "verdict": "Uncertain",
+      "expected_rule_ids": [
+        "LEAK_ARBITRARY_TRANSFERFROM"
+      ],
+      "expected_families": [
+        "C"
+      ],
+      "fired_rule_ids": [],
+      "fired_families": []
+    },
+    {
+      "id": "tier1/LEAK_EXEMPT_PATH/mal",
+      "tier": "tier1_pairs",
+      "reason": "no_expected_rule",
+      "verdict": "Uncertain",
+      "expected_rule_ids": [
+        "LEAK_EXEMPT_PATH"
+      ],
+      "expected_families": [
+        "C"
+      ],
+      "fired_rule_ids": [],
+      "fired_families": []
+    },
+    {
+      "id": "tier1/LEAK_PRIV_SWEEP/mal",
+      "tier": "tier1_pairs",
+      "reason": "no_expected_rule",
+      "verdict": "Uncertain",
+      "expected_rule_ids": [
+        "LEAK_PRIV_SWEEP"
+      ],
+      "expected_families": [
+        "C"
+      ],
+      "fired_rule_ids": [],
+      "fired_families": []
+    },
+    {
+      "id": "tier1/OWN_FAKE_RENOUNCE/mal",
+      "tier": "tier1_pairs",
+      "reason": "no_expected_rule",
+      "verdict": "Uncertain",
+      "expected_rule_ids": [
+        "OWN_FAKE_RENOUNCE"
+      ],
+      "expected_families": [
+        "D"
+      ],
+      "fired_rule_ids": [],
+      "fired_families": []
+    },
+    {
+      "id": "tier1/OWN_HIDDEN_ROLE/mal",
+      "tier": "tier1_pairs",
+      "reason": "no_expected_rule",
+      "verdict": "Uncertain",
+      "expected_rule_ids": [
+        "OWN_HIDDEN_ROLE"
+      ],
+      "expected_families": [
+        "D"
+      ],
+      "fired_rule_ids": [],
+      "fired_families": []
+    },
+    {
+      "id": "tier1/OWN_REASSIGN_NONSTD/mal",
+      "tier": "tier1_pairs",
+      "reason": "no_expected_rule",
+      "verdict": "Uncertain",
+      "expected_rule_ids": [
+        "OWN_REASSIGN_NONSTD"
+      ],
+      "expected_families": [
+        "D"
+      ],
+      "fired_rule_ids": [],
+      "fired_families": []
+    },
+    {
+      "id": "tier1/PRIV_ROLE/mal",
+      "tier": "tier1_pairs",
+      "reason": "no_expected_rule",
+      "verdict": "Uncertain",
+      "expected_rule_ids": [
+        "PRIV_ROLE"
+      ],
+      "expected_families": [
+        "A"
+      ],
+      "fired_rule_ids": [],
+      "fired_families": []
+    },
+    {
+      "id": "tier1/STRUCT_DELEGATECALL_SETTABLE/mal",
+      "tier": "tier1_pairs",
+      "reason": "no_expected_rule",
+      "verdict": "Uncertain",
+      "expected_rule_ids": [
+        "STRUCT_DELEGATECALL_SETTABLE"
+      ],
+      "expected_families": [
+        "E"
+      ],
+      "fired_rule_ids": [],
+      "fired_families": []
+    },
+    {
+      "id": "tier1/STRUCT_SELFDESTRUCT/mal",
+      "tier": "tier1_pairs",
+      "reason": "no_expected_rule",
+      "verdict": "Uncertain",
+      "expected_rule_ids": [
+        "STRUCT_SELFDESTRUCT"
+      ],
+      "expected_families": [
+        "E"
+      ],
+      "fired_rule_ids": [],
+      "fired_families": []
+    },
+    {
+      "id": "tier1/VIEW_CALLER_DEPENDENT/mal",
+      "tier": "tier1_pairs",
+      "reason": "no_expected_rule",
+      "verdict": "Uncertain",
+      "expected_rule_ids": [
+        "VIEW_CALLER_DEPENDENT"
+      ],
+      "expected_families": [
+        "B"
+      ],
+      "fired_rule_ids": [],
+      "fired_families": []
+    }
+  ],
+  "determinism": {
+    "n_runs": 2,
+    "deterministic": true,
+    "diffs": []
+  },
+  "runtime": {
+    "p50": 0.3889,
+    "p95": 0.3889
+  }
+}

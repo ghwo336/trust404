@@ -1,0 +1,9 @@
+id: tier2/crpwarner/0xcb6CD204D783DC8d66896A6DEf5867d332228D7b_sol
+file: 0xcb6CD204D783DC8d66896A6DEf5867d332228D7b_sol.sol
+preferred_verdict: Malicious
+accepted_verdicts:
+- Malicious
+source: 'crpwarner manifest: Limiting Sell'
+solc: 0.7.6
+expected_families:
+- A

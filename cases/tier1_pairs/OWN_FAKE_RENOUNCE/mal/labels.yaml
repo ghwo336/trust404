@@ -1,0 +1,13 @@
+id: tier1/OWN_FAKE_RENOUNCE/mal
+file: FakeRenounce.sol
+preferred_verdict: Malicious
+accepted_verdicts:
+  - Malicious
+expected_families:
+  - D
+expected_rule_ids:
+  - OWN_FAKE_RENOUNCE
+expected_functions:
+  - renounceOwnership
+source: spec §7 OWN_FAKE_RENOUNCE; renounceOwnership zeros owner but _dev remains
+solc: "0.8.20"

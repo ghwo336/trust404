@@ -1,0 +1,10 @@
+id: tier2/honeybadger/skip_empty_string_literal_0x251848c3fc50274f5fda449919f083dc937b48b2_sol
+file: skip_empty_string_literal_0x251848c3fc50274f5fda449919f083dc937b48b2_sol.sol
+preferred_verdict: Uncertain
+accepted_verdicts:
+- Uncertain
+source: 'honeybadger manifest: skip_empty_string_literal'
+solc: 0.8.20
+expected_families:
+- F
+notes: non-compiling paper fixture

@@ -1,0 +1,11 @@
+id: tier1/STRUCT_DELEGATECALL_SETTABLE/ben
+file: FixedLib.sol
+preferred_verdict: Benign
+accepted_verdicts:
+  - Benign
+expected_families:
+  - E
+expected_rule_ids:
+  - STRUCT_DELEGATECALL_SETTABLE
+source: spec §6 fixed internal library-style pure hash, no delegatecall
+solc: "0.8.20"

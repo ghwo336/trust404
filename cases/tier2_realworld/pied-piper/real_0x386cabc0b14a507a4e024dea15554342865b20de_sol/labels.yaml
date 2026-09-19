@@ -1,0 +1,9 @@
+id: tier2/pied-piper/real_0x386cabc0b14a507a4e024dea15554342865b20de_sol
+file: real_0x386cabc0b14a507a4e024dea15554342865b20de_sol.sol
+preferred_verdict: Malicious
+accepted_verdicts:
+- Malicious
+source: 'pied-piper manifest: Generate/Destroy'
+solc: 0.4.26
+expected_families:
+- B

@@ -1,0 +1,10 @@
+id: tier2/honeybadger/uninitialised_struct_0x37541ebf8b4e25d36fbaa9b4c4eaad8c06314d6f_sol
+file: uninitialised_struct_0x37541ebf8b4e25d36fbaa9b4c4eaad8c06314d6f_sol.sol
+preferred_verdict: Uncertain
+accepted_verdicts:
+- Uncertain
+source: 'honeybadger manifest: uninitialised_struct'
+solc: 0.8.20
+expected_families:
+- F
+notes: non-compiling paper fixture

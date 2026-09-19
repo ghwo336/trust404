@@ -1,0 +1,9 @@
+id: tier2/honeybadger/balance_disorder_0xdf77e4a81fba17e0cc39dba521aa4167f388ed7c_sol
+file: balance_disorder_0xdf77e4a81fba17e0cc39dba521aa4167f388ed7c_sol.sol
+preferred_verdict: Malicious
+accepted_verdicts:
+- Malicious
+source: 'honeybadger manifest: balance_disorder'
+solc: 0.4.26
+expected_families:
+- F

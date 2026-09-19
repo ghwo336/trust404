@@ -1,0 +1,9 @@
+id: tier1/LEAK_PRIV_SWEEP/mal
+file: mal.sol
+preferred_verdict: Malicious
+accepted_verdicts: [Malicious]
+expected_families: [C]
+expected_rule_ids: [LEAK_PRIV_SWEEP]
+expected_functions: [emergencyWithdraw]
+source: spec §7 LEAK_PRIV_SWEEP — owner drains contract-held user ETH
+solc: "0.8.20"

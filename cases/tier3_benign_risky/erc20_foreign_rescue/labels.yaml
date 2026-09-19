@@ -1,0 +1,8 @@
+id: tier3/erc20_foreign_rescue
+file: Erc20ForeignRescue.sol
+preferred_verdict: Benign
+accepted_verdicts: [Benign, Uncertain]
+expected_families: []
+source: "reproduction of ERC20 foreign-token rescueERC20; shape per spec §6"
+solc: "0.8.20"
+notes: "faithful reproduction (real source not vendored). rescueERC20 refuses address(this)."

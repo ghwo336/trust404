@@ -1,0 +1,10 @@
+id: tier2/honeybadger/straw_man_contract_0x23f890c412f3f06784a30ba40ed4832a0fca55f0_sol
+file: straw_man_contract_0x23f890c412f3f06784a30ba40ed4832a0fca55f0_sol.sol
+preferred_verdict: Uncertain
+accepted_verdicts:
+- Uncertain
+source: 'honeybadger manifest: straw_man_contract'
+solc: 0.4.26
+expected_families:
+- F
+notes: non-compiling paper fixture

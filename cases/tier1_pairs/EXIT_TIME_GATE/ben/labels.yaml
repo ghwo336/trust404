@@ -1,0 +1,8 @@
+id: tier1/EXIT_TIME_GATE/ben
+file: ben.sol
+preferred_verdict: Benign
+accepted_verdicts: [Benign, Uncertain]
+expected_families: [A]
+expected_rule_ids: []
+source: spec §6 anti-bot launch window — immutable launchTime, gate only for a constant 5-minute window
+solc: "0.8.20"

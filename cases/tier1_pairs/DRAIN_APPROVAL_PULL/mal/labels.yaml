@@ -1,0 +1,9 @@
+id: tier1/DRAIN_APPROVAL_PULL/mal
+file: mal.sol
+preferred_verdict: Malicious
+accepted_verdicts: [Malicious]
+expected_families: [F]
+expected_rule_ids: [DRAIN_APPROVAL_PULL]
+expected_functions: [claim]
+source: spec §7 DRAIN_APPROVAL_PULL (HIGH, family F) — transferFrom from msg.sender to non-caller, no credit back
+solc: "0.8.20"

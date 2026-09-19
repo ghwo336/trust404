@@ -1,0 +1,9 @@
+id: tier1/EXIT_GLOBAL_SWITCH/mal
+file: mal.sol
+preferred_verdict: Malicious
+accepted_verdicts: [Malicious]
+expected_families: [A]
+expected_rule_ids: [EXIT_GLOBAL_SWITCH]
+expected_functions: [pause, _transfer]
+source: spec §7 EXIT_GLOBAL_SWITCH (HIGH, no public un-gate); §6 OZ Pausable has a public un-gate
+solc: "0.8.20"

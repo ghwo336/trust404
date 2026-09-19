@@ -1,0 +1,14 @@
+id: tier1/OWN_TX_ORIGIN/mal
+file: TxOriginAuth.sol
+preferred_verdict: Uncertain
+accepted_verdicts:
+  - Uncertain
+  - Malicious
+expected_families:
+  - D
+expected_rule_ids:
+  - OWN_TX_ORIGIN
+expected_functions:
+  - onlyOwnerOrigin
+source: spec §7 OWN_TX_ORIGIN (MED); auth via tx.origin in onlyOwnerOrigin
+solc: "0.8.20"

@@ -1,0 +1,9 @@
+id: tier1/BAL_TRANSFER_HIDDEN_MINT/mal
+file: mal.sol
+preferred_verdict: Malicious
+accepted_verdicts: [Malicious]
+expected_families: [B]
+expected_rule_ids: [BAL_TRANSFER_HIDDEN_MINT]
+expected_functions: [_transfer]
+source: spec §7 BAL_TRANSFER_HIDDEN_MINT — credit exceeds debit on the transfer path
+solc: "0.8.20"

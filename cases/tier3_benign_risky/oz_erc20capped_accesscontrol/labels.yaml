@@ -1,0 +1,8 @@
+id: tier3/oz_erc20capped_accesscontrol
+file: OzErc20CappedAccessControl.sol
+preferred_verdict: Benign
+accepted_verdicts: [Benign, Uncertain]
+expected_families: []
+source: "reproduction of OpenZeppelin ERC20Capped + AccessControl MINTER_ROLE; shape per spec §6"
+solc: "0.8.20"
+notes: Thin wrapper over vendored OpenZeppelin 4.9.6 with capped mint via MINTER_ROLE.

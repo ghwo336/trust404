@@ -1,0 +1,14 @@
+id: tier1/STRUCT_PROXY_EOA_ADMIN/mal
+file: EoaAdminProxy.sol
+preferred_verdict: Uncertain
+accepted_verdicts:
+  - Uncertain
+  - Malicious
+expected_families:
+  - E
+expected_rule_ids:
+  - STRUCT_PROXY_EOA_ADMIN
+expected_functions:
+  - setImplementation
+source: spec §7 STRUCT_PROXY_EOA_ADMIN (MED); single EOA admin setImplementation
+solc: "0.8.20"

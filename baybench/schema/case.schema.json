@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trust404.local/baybench/case.schema.json",
+  "title": "BAYBENCH case labels",
+  "type": "object",
+  "required": ["id", "file", "preferred_verdict", "accepted_verdicts"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {"type": "string", "minLength": 1},
+    "file": {"type": "string", "minLength": 1},
+    "preferred_verdict": {"$ref": "#/$defs/verdict"},
+    "accepted_verdicts": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/verdict"}},
+    "expected_families": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/family"}},
+    "expected_rule_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "expected_functions": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "source": {"type": "string"},
+    "solc": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"},
+    "notes": {"type": "string"}
+  },
+  "$defs": {
+    "verdict": {"enum": ["Benign", "Malicious", "Uncertain"]},
+    "family": {"enum": ["A", "B", "C", "D", "E", "F", "G"]}
+  }
+}

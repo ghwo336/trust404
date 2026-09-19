@@ -1,0 +1,19 @@
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.20;
+
+contract PlainToken {
+    mapping(address => uint256) public balanceOf;
+    uint256 public totalSupply;
+
+    constructor(uint256 supply) {
+        totalSupply = supply;
+        balanceOf[msg.sender] = supply;
+    }
+
+    function transfer(address to, uint256 amount) external returns (bool) {
+        require(balanceOf[msg.sender] >= amount, "bal");
+        balanceOf[msg.sender] -= amount;
+        balanceOf[to] += amount;
+        return true;
+    }
+}

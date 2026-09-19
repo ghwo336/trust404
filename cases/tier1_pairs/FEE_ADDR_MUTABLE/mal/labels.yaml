@@ -1,0 +1,9 @@
+id: tier1/FEE_ADDR_MUTABLE/mal
+file: mal.sol
+preferred_verdict: Uncertain
+accepted_verdicts: [Uncertain, Malicious]
+expected_families: [C]
+expected_rule_ids: [FEE_ADDR_MUTABLE]
+expected_functions: [setFeeWallet]
+source: spec §7 FEE_ADDR_MUTABLE (MED-only); feeWallet is privileged-writable via setFeeWallet
+solc: "0.8.20"

@@ -1,0 +1,9 @@
+id: tier1/EXIT_SELL_ONLY/mal
+file: mal.sol
+preferred_verdict: Malicious
+accepted_verdicts: [Malicious]
+expected_families: [A]
+expected_rule_ids: [EXIT_SELL_ONLY]
+expected_functions: [setPair, _transfer]
+source: spec §7 EXIT_SELL_ONLY — revert only when to == owner-settable pair
+solc: "0.8.20"

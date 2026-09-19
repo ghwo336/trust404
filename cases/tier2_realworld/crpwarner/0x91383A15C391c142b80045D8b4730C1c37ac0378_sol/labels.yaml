@@ -1,0 +1,8 @@
+id: tier2/crpwarner/0x91383A15C391c142b80045D8b4730C1c37ac0378_sol
+file: 0x91383A15C391c142b80045D8b4730C1c37ac0378_sol.sol
+preferred_verdict: Uncertain
+accepted_verdicts:
+- Uncertain
+source: 'crpwarner manifest: '
+solc: 0.6.12
+notes: 'unknown category: ; non-compiling paper fixture'

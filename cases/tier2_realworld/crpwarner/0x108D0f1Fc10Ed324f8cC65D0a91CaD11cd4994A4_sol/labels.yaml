@@ -1,0 +1,10 @@
+id: tier2/crpwarner/0x108D0f1Fc10Ed324f8cC65D0a91CaD11cd4994A4_sol
+file: 0x108D0f1Fc10Ed324f8cC65D0a91CaD11cd4994A4_sol.sol
+preferred_verdict: Uncertain
+accepted_verdicts:
+- Uncertain
+source: 'crpwarner manifest: Leaking'
+solc: 0.8.20
+expected_families:
+- C
+notes: non-compiling paper fixture

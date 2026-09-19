@@ -1,0 +1,9 @@
+id: tier2/honeybadger/inheritance_disorder_0x33b44a1d150f3feaa40503ad20a75634adc39b18_sol
+file: inheritance_disorder_0x33b44a1d150f3feaa40503ad20a75634adc39b18_sol.sol
+preferred_verdict: Malicious
+accepted_verdicts:
+- Malicious
+source: 'honeybadger manifest: inheritance_disorder'
+solc: 0.4.26
+expected_families:
+- F

@@ -1,0 +1,7 @@
+id: tier1/_harness/compile_fail
+file: broken.sol
+preferred_verdict: Uncertain
+accepted_verdicts: [Uncertain]
+notes: "expect_compile_fail"
+source: "harness: compile failure -> Uncertain(compile_failed)"
+solc: "0.8.20"

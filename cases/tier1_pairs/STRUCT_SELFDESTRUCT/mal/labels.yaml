@@ -1,0 +1,13 @@
+id: tier1/STRUCT_SELFDESTRUCT/mal
+file: Killable.sol
+preferred_verdict: Malicious
+accepted_verdicts:
+  - Malicious
+expected_families:
+  - E
+expected_rule_ids:
+  - STRUCT_SELFDESTRUCT
+expected_functions:
+  - kill
+source: spec §7 STRUCT_SELFDESTRUCT; kill() onlyOwner selfdestructs to owner
+solc: "0.8.20"

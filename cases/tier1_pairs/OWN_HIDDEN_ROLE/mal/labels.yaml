@@ -1,0 +1,13 @@
+id: tier1/OWN_HIDDEN_ROLE/mal
+file: HiddenRole.sol
+preferred_verdict: Malicious
+accepted_verdicts:
+  - Malicious
+expected_families:
+  - D
+expected_rule_ids:
+  - OWN_HIDDEN_ROLE
+expected_functions:
+  - setBlacklist
+source: spec §7 OWN_HIDDEN_ROLE; visible owner plus hidden _dev / onlyDev
+solc: "0.8.20"

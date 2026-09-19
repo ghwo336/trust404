@@ -1,0 +1,11 @@
+id: tier1/OWN_FAKE_RENOUNCE/ben
+file: OwnableRenounce.sol
+preferred_verdict: Benign
+accepted_verdicts:
+  - Benign
+expected_families:
+  - D
+expected_rule_ids:
+  - OWN_FAKE_RENOUNCE
+source: spec §6 OZ Ownable.renounceOwnership clears the only auth role
+solc: "0.8.20"

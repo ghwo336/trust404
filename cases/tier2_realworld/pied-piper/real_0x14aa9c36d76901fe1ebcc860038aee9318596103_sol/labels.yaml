@@ -1,0 +1,10 @@
+id: tier2/pied-piper/real_0x14aa9c36d76901fe1ebcc860038aee9318596103_sol
+file: real_0x14aa9c36d76901fe1ebcc860038aee9318596103_sol.sol
+preferred_verdict: Uncertain
+accepted_verdicts:
+- Uncertain
+source: 'pied-piper manifest: Arbitrary Transfer'
+solc: 0.8.20
+expected_families:
+- C
+notes: non-compiling paper fixture

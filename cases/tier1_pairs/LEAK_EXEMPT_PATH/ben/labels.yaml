@@ -1,0 +1,8 @@
+id: tier1/LEAK_EXEMPT_PATH/ben
+file: ben.sol
+preferred_verdict: Benign
+accepted_verdicts: [Benign]
+expected_families: [C]
+expected_rule_ids: []
+source: spec §6 excludeFromFee — exempt skips fee only, still fully debits from
+solc: "0.8.20"

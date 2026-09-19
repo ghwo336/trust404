@@ -1,0 +1,9 @@
+id: tier2/honeybadger/hidden_state_update_0x7ffc2bd9431b059c509b45b33e77852d47de827d_sol
+file: hidden_state_update_0x7ffc2bd9431b059c509b45b33e77852d47de827d_sol.sol
+preferred_verdict: Malicious
+accepted_verdicts:
+- Malicious
+source: 'honeybadger manifest: hidden_state_update'
+solc: 0.4.26
+expected_families:
+- F

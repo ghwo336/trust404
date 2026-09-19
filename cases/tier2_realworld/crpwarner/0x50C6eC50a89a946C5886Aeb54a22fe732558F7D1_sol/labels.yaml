@@ -1,0 +1,9 @@
+id: tier2/crpwarner/0x50C6eC50a89a946C5886Aeb54a22fe732558F7D1_sol
+file: 0x50C6eC50a89a946C5886Aeb54a22fe732558F7D1_sol.sol
+preferred_verdict: Malicious
+accepted_verdicts:
+- Malicious
+source: 'crpwarner manifest: Leaking'
+solc: 0.7.6
+expected_families:
+- C

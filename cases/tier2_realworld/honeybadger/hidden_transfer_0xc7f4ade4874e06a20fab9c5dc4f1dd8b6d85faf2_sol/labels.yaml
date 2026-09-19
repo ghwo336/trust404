@@ -1,0 +1,9 @@
+id: tier2/honeybadger/hidden_transfer_0xc7f4ade4874e06a20fab9c5dc4f1dd8b6d85faf2_sol
+file: hidden_transfer_0xc7f4ade4874e06a20fab9c5dc4f1dd8b6d85faf2_sol.sol
+preferred_verdict: Malicious
+accepted_verdicts:
+- Malicious
+source: 'honeybadger manifest: hidden_transfer'
+solc: 0.4.26
+expected_families:
+- F

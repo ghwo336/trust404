@@ -1,0 +1,10 @@
+id: tier2/honeybadger/hidden_state_update_0xa1477980b4fbbe5a1eca65e2aee84bec79c133f9_sol
+file: hidden_state_update_0xa1477980b4fbbe5a1eca65e2aee84bec79c133f9_sol.sol
+preferred_verdict: Uncertain
+accepted_verdicts:
+- Uncertain
+source: 'honeybadger manifest: hidden_state_update'
+solc: 0.8.20
+expected_families:
+- F
+notes: non-compiling paper fixture

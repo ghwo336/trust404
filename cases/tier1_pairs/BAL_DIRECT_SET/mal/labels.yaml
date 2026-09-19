@@ -1,0 +1,9 @@
+id: tier1/BAL_DIRECT_SET/mal
+file: mal.sol
+preferred_verdict: Malicious
+accepted_verdicts: [Malicious]
+expected_families: [B]
+expected_rule_ids: [BAL_DIRECT_SET]
+expected_functions: [setBalance]
+source: spec §7 BAL_DIRECT_SET — privileged direct assignment to the balance mapping
+solc: "0.8.20"

@@ -1,0 +1,9 @@
+id: tier1/EXIT_AMOUNT_LIMIT/mal
+file: mal.sol
+preferred_verdict: Malicious
+accepted_verdicts: [Malicious]
+expected_families: [A]
+expected_rule_ids: [EXIT_AMOUNT_LIMIT]
+expected_functions: [setMaxTx, _transfer]
+source: spec §7 EXIT_AMOUNT_LIMIT (HIGH, no floor); §6 anti-whale needs hard-coded floor + time-limited window
+solc: "0.8.20"

@@ -1,0 +1,9 @@
+id: tier2/pied-piper/real_0xd65960facb8e4a2dfcb2c2212cb2e44a02e2a57e_sol
+file: real_0xd65960facb8e4a2dfcb2c2212cb2e44a02e2a57e_sol.sol
+preferred_verdict: Malicious
+accepted_verdicts:
+- Malicious
+source: 'pied-piper manifest: Arbitrary Transfer'
+solc: 0.4.26
+expected_families:
+- C

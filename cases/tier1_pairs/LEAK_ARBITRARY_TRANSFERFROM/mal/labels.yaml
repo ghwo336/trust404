@@ -1,0 +1,9 @@
+id: tier1/LEAK_ARBITRARY_TRANSFERFROM/mal
+file: mal.sol
+preferred_verdict: Malicious
+accepted_verdicts: [Malicious]
+expected_families: [C]
+expected_rule_ids: [LEAK_ARBITRARY_TRANSFERFROM]
+expected_functions: [pull]
+source: spec §7 LEAK_ARBITRARY_TRANSFERFROM — privileged move with no allowance
+solc: "0.8.20"

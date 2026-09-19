@@ -1,0 +1,11 @@
+# BAYBENCH tool registry. Each tool has `name` and either `image` (docker mode) or `cmd` (--no-docker mode; {input} and {output} are substituted).
+tools:
+  - name: baseline_keyword
+    image: baybench/baseline_keyword:latest
+    cmd: ".venv/bin/python tools/baseline_keyword/tool.py {input} {output}/results.json"
+  - name: baseline_slither
+    image: baybench/baseline_slither:latest
+    cmd: ".venv/bin/python tools/baseline_slither/tool.py {input} {output}/results.json"
+  - name: probe_network
+    image: baybench/probe_network:latest
+    cmd: ".venv/bin/python tools/probe_network/tool.py {input} {output}/results.json"

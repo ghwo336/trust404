@@ -1,0 +1,8 @@
+id: tier1/PRIV_ROLE/ben
+file: ben.sol
+preferred_verdict: Benign
+accepted_verdicts: [Benign, Uncertain]
+expected_families: [A]
+expected_rule_ids: [PRIV_ROLE]
+source: spec §6 OpenZeppelin AccessControl — documented DEFAULT_ADMIN_ROLE, standard visible role
+solc: "0.8.20"

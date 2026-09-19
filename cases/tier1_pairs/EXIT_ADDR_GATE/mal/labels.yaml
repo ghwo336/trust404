@@ -1,0 +1,9 @@
+id: tier1/EXIT_ADDR_GATE/mal
+file: mal.sol
+preferred_verdict: Malicious
+accepted_verdicts: [Malicious]
+expected_families: [A]
+expected_rule_ids: [EXIT_ADDR_GATE]
+expected_functions: [setBots, _transfer]
+source: spec §7 EXIT_ADDR_GATE; §6 discriminator is revert end-node (blacklist) vs fee skip
+solc: "0.8.20"

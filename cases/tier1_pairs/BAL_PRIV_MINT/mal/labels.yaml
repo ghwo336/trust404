@@ -1,0 +1,9 @@
+id: tier1/BAL_PRIV_MINT/mal
+file: mal.sol
+preferred_verdict: Malicious
+accepted_verdicts: [Malicious]
+expected_families: [B]
+expected_rule_ids: [BAL_PRIV_MINT]
+expected_functions: [mint]
+source: spec §7 BAL_PRIV_MINT — privileged uncapped mint outside constructor
+solc: "0.8.20"

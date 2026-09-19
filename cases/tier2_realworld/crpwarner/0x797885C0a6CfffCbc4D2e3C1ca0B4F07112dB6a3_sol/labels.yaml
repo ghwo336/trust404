@@ -1,0 +1,10 @@
+id: tier2/crpwarner/0x797885C0a6CfffCbc4D2e3C1ca0B4F07112dB6a3_sol
+file: 0x797885C0a6CfffCbc4D2e3C1ca0B4F07112dB6a3_sol.sol
+preferred_verdict: Uncertain
+accepted_verdicts:
+- Uncertain
+source: 'crpwarner manifest: Limiting Sell'
+solc: 0.8.20
+expected_families:
+- A
+notes: non-compiling paper fixture

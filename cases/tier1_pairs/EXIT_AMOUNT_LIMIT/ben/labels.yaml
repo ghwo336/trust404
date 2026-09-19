@@ -1,0 +1,8 @@
+id: tier1/EXIT_AMOUNT_LIMIT/ben
+file: ben.sol
+preferred_verdict: Benign
+accepted_verdicts: [Benign, Uncertain]
+expected_families: [A]
+expected_rule_ids: []
+source: spec §6 anti-whale — hard floor totalSupply()/100 and immutable 5-minute launch window
+solc: "0.8.20"

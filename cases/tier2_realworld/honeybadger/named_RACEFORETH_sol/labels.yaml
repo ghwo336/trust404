@@ -1,0 +1,9 @@
+id: tier2/honeybadger/named_RACEFORETH_sol
+file: named_RACEFORETH_sol.sol
+preferred_verdict: Malicious
+accepted_verdicts:
+- Malicious
+source: 'honeybadger manifest: honeypot'
+solc: 0.4.26
+expected_families:
+- F

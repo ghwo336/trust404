@@ -1,0 +1,9 @@
+id: tier1/EXIT_TIME_GATE/mal
+file: mal.sol
+preferred_verdict: Malicious
+accepted_verdicts: [Malicious]
+expected_families: [A]
+expected_rule_ids: [EXIT_TIME_GATE]
+expected_functions: [setTradingStart, _transfer]
+source: spec §7 EXIT_TIME_GATE (HIGH, no expiry); owner can push tradingStart arbitrarily forward
+solc: "0.8.20"

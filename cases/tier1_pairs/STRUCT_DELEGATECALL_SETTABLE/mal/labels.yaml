@@ -1,0 +1,14 @@
+id: tier1/STRUCT_DELEGATECALL_SETTABLE/mal
+file: SettableDelegate.sol
+preferred_verdict: Malicious
+accepted_verdicts:
+  - Malicious
+expected_families:
+  - E
+expected_rule_ids:
+  - STRUCT_DELEGATECALL_SETTABLE
+expected_functions:
+  - exec
+  - setImpl
+source: spec §7 STRUCT_DELEGATECALL_SETTABLE; exec delegatecalls owner-settable impl
+solc: "0.8.20"

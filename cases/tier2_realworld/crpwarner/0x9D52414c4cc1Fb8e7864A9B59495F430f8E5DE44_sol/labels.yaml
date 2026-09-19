@@ -1,0 +1,8 @@
+id: tier2/crpwarner/0x9D52414c4cc1Fb8e7864A9B59495F430f8E5DE44_sol
+file: 0x9D52414c4cc1Fb8e7864A9B59495F430f8E5DE44_sol.sol
+preferred_verdict: Uncertain
+accepted_verdicts:
+- Uncertain
+source: 'crpwarner manifest: '
+solc: 0.6.12
+notes: 'unknown category: ; non-compiling paper fixture'

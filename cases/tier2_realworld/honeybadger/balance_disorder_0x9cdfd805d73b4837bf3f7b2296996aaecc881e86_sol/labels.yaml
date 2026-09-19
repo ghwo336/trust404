@@ -1,0 +1,10 @@
+id: tier2/honeybadger/balance_disorder_0x9cdfd805d73b4837bf3f7b2296996aaecc881e86_sol
+file: balance_disorder_0x9cdfd805d73b4837bf3f7b2296996aaecc881e86_sol.sol
+preferred_verdict: Uncertain
+accepted_verdicts:
+- Uncertain
+source: 'honeybadger manifest: balance_disorder'
+solc: 0.8.20
+expected_families:
+- F
+notes: non-compiling paper fixture

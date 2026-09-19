@@ -1,0 +1,8 @@
+id: tier2/crpwarner/0xf0b692aCE03fFB689628E68D4919F91723D1c5a2_sol
+file: 0xf0b692aCE03fFB689628E68D4919F91723D1c5a2_sol.sol
+preferred_verdict: Malicious
+accepted_verdicts:
+- Malicious
+source: 'crpwarner manifest: '
+solc: 0.8.24
+notes: 'unknown category: '

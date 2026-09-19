@@ -1,0 +1,8 @@
+id: tier1/BAL_TRANSFER_HIDDEN_MINT/ben
+file: ben.sol
+preferred_verdict: Benign
+accepted_verdicts: [Benign]
+expected_families: [B]
+expected_rule_ids: []
+source: spec §6 fee lookalike — debit equals credit after a conserving fee split
+solc: "0.8.20"

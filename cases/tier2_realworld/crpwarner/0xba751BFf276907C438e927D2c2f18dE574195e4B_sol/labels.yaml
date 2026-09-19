@@ -1,0 +1,10 @@
+id: tier2/crpwarner/0xba751BFf276907C438e927D2c2f18dE574195e4B_sol
+file: 0xba751BFf276907C438e927D2c2f18dE574195e4B_sol.sol
+preferred_verdict: Uncertain
+accepted_verdicts:
+- Uncertain
+source: 'crpwarner manifest: Hidden Mint'
+solc: 0.8.20
+expected_families:
+- B
+notes: non-compiling paper fixture

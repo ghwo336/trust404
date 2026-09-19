@@ -1,0 +1,10 @@
+id: tier2/pied-piper/injected_GenerateToken_4_sol
+file: injected_GenerateToken_4_sol.sol
+preferred_verdict: Uncertain
+accepted_verdicts:
+- Uncertain
+source: 'pied-piper manifest: Generate/Destroy'
+solc: 0.4.26
+expected_families:
+- B
+notes: non-compiling paper fixture

@@ -1,0 +1,9 @@
+id: tier2/pied-piper/real_0xa88fc5e2b9aa4e3bb40d67fa553517a1569c8e72_sol
+file: real_0xa88fc5e2b9aa4e3bb40d67fa553517a1569c8e72_sol.sol
+preferred_verdict: Malicious
+accepted_verdicts:
+- Malicious
+source: 'pied-piper manifest: Disable/Freeze'
+solc: 0.4.26
+expected_families:
+- A

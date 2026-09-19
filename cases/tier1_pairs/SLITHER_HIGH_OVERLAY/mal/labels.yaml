@@ -1,0 +1,9 @@
+id: tier1/SLITHER_HIGH_OVERLAY/mal
+file: mal.sol
+preferred_verdict: Uncertain
+accepted_verdicts: [Uncertain, Malicious]
+expected_families: [C]
+expected_rule_ids: [SLITHER_HIGH_OVERLAY]
+expected_functions: [withdraw]
+source: spec §7 SLITHER_HIGH_OVERLAY (INFO; can lift Benign → Uncertain only) — reentrancy-eth
+solc: "0.8.20"

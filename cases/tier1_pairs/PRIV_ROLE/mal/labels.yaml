@@ -1,0 +1,9 @@
+id: tier1/PRIV_ROLE/mal
+file: mal.sol
+preferred_verdict: Malicious
+accepted_verdicts: [Malicious]
+expected_families: [A]
+expected_rule_ids: [PRIV_ROLE]
+expected_functions: [setBlacklist]
+source: spec §7 PRIV_ROLE — name-agnostic address→bool map in auth, not a visible owner
+solc: "0.8.20"

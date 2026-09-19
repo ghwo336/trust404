@@ -1,0 +1,9 @@
+id: tier2/honeybadger/straw_man_contract_0x4e73b32ed6c35f570686b89848e5f39f20ecc106_sol
+file: straw_man_contract_0x4e73b32ed6c35f570686b89848e5f39f20ecc106_sol.sol
+preferred_verdict: Malicious
+accepted_verdicts:
+- Malicious
+source: 'honeybadger manifest: straw_man_contract'
+solc: 0.4.26
+expected_families:
+- F

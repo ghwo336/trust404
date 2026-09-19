@@ -1,0 +1,9 @@
+id: tier1/LEAK_EXEMPT_PATH/mal
+file: mal.sol
+preferred_verdict: Malicious
+accepted_verdicts: [Malicious]
+expected_families: [C]
+expected_rule_ids: [LEAK_EXEMPT_PATH]
+expected_functions: [_transfer]
+source: spec §7 LEAK_EXEMPT_PATH — privileged branch skips the debit
+solc: "0.8.20"

@@ -1,0 +1,9 @@
+id: tier2/pied-piper/real_0xe7d3e4413e29ae35b0893140f4500965c74365e5_sol
+file: real_0xe7d3e4413e29ae35b0893140f4500965c74365e5_sol.sol
+preferred_verdict: Malicious
+accepted_verdicts:
+- Malicious
+source: 'pied-piper manifest: Generate/Destroy'
+solc: 0.4.26
+expected_families:
+- B

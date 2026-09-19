@@ -1,0 +1,9 @@
+id: tier2/honeybadger/uninitialised_struct_0x741f1923974464efd0aa70e77800ba5d9ed18902_sol
+file: uninitialised_struct_0x741f1923974464efd0aa70e77800ba5d9ed18902_sol.sol
+preferred_verdict: Malicious
+accepted_verdicts:
+- Malicious
+source: 'honeybadger manifest: uninitialised_struct'
+solc: 0.4.26
+expected_families:
+- F
