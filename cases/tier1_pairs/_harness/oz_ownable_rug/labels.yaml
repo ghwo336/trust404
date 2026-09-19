@@ -1,0 +1,9 @@
+id: tier1/_harness/oz_ownable_rug
+file: OzOwnableRug.sol
+preferred_verdict: Malicious
+accepted_verdicts: [Malicious]
+expected_families: [A]
+expected_rule_ids: [EXIT_ADDR_GATE]
+expected_functions: [setBots, _beforeTokenTransfer]
+source: "harness: OZ Ownable + owner-settable blacklist gate on transfers (library provenance of onlyOwner must not downgrade)"
+solc: "0.8.20"

@@ -91,16 +91,35 @@ def test_timeout_removes_leftover_temp_copy(monkeypatch, tmp_path) -> None:
     assert _listing(tmp_path) == ["T.sol"]
 
 
+HARNESS_FILES = [
+    "compile_fail/broken.sol",
+    "multi_file/Helper.sol",
+    "multi_file/Token.sol",
+    "oz_accesscontrol_blacklist/OzRoleBlacklist.sol",
+    "oz_import/TokenOZ.sol",
+    "oz_ownable2step_token/OzTwoStepToken.sol",
+    "oz_ownable_fee_capped/OzFeeCapped.sol",
+    "oz_ownable_rug/OzOwnableRug.sol",
+    "timelock_self_call/MiniTimelock.sol",
+]
+
+# OZ-shaped regression fixtures: verdicts are pinned by their labels.yaml and scored by BAYBENCH,
+# not asserted here (known-open detector work). The engine must still compile and analyse them.
+OZ_REGRESSION_FILES = (
+    "oz_accesscontrol_blacklist/OzRoleBlacklist.sol",
+    "oz_ownable2step_token/OzTwoStepToken.sol",
+    "oz_ownable_fee_capped/OzFeeCapped.sol",
+    "oz_ownable_rug/OzOwnableRug.sol",
+    "timelock_self_call/MiniTimelock.sol",
+)
+
+
 def test_analyze_dir_harness() -> None:
     results = analyze_dir(HARNESS)
     files = [r.file for r in results]
     assert files == sorted(files)
-    assert files == [
-        "compile_fail/broken.sol",
-        "multi_file/Helper.sol",
-        "multi_file/Token.sol",
-        "oz_import/TokenOZ.sol",
-    ]
+    assert files == HARNESS_FILES
+    assert files == sorted(p.relative_to(HARNESS).as_posix() for p in HARNESS.rglob("*.sol"))
     by_file = {r.file: r for r in results}
     broken = by_file["compile_fail/broken.sol"]
     assert broken.verdict == "Uncertain"
@@ -109,6 +128,9 @@ def test_analyze_dir_harness() -> None:
         assert by_file[rel].verdict == "Benign"
         assert by_file[rel].reason == ""
         assert by_file[rel].findings == ()
+    for rel in OZ_REGRESSION_FILES:
+        assert by_file[rel].verdict in {"Malicious", "Uncertain", "Benign"}
+        assert by_file[rel].reason != "compile_failed"
 
 
 def test_timeout_and_analysis_error(monkeypatch, tmp_path) -> None:

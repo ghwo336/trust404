@@ -1,0 +1,6 @@
+id: tier1/_harness/timelock_self_call
+file: MiniTimelock.sol
+preferred_verdict: Benign
+accepted_verdicts: [Benign, Uncertain]
+source: "harness: governance timelock; self-call gate and pending/accept handoff are not ownership fraud"
+solc: "0.8.20"
