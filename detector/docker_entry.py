@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 
@@ -10,11 +11,22 @@ from detector import cli
 INPUT_DIR = "/input"
 OUTPUT_DIR = "/output"
 
+logger = logging.getLogger(__name__)
 
-def _mode() -> str:
+
+def _auto_mode() -> str:
     if os.path.isdir(OUTPUT_DIR) and os.access(OUTPUT_DIR, os.W_OK):
         return "bench"
     return "submission"
+
+
+def _mode() -> str:
+    raw = os.environ.get("DETECTOR_MODE", "").strip().lower()
+    if raw == "submission" or raw == "bench":
+        return raw
+    if raw:
+        logger.warning("unknown DETECTOR_MODE=%r; falling back to auto-detect", raw)
+    return _auto_mode()
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import logging
 import os
+import sys
 import time
 from pathlib import Path
 
@@ -339,3 +341,23 @@ def _apply_risk_fields(
                 obj["confidence"] = 0.85
         case _ as unreachable:
             raise AssertionError(f"unreachable verdict: {unreachable}")
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="detector.submission")
+    parser.add_argument("--validate", required=True, metavar="PATH")
+    args = parser.parse_args(argv)
+    try:
+        obj = json.loads(Path(args.validate).read_text(encoding="utf-8"))
+        if not (isinstance(obj, list) and obj):
+            raise ValueError("expected a non-empty JSON array")
+        validate_against_schema(obj)
+    except Exception as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+

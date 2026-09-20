@@ -366,7 +366,58 @@ def test_run_sh_submission_tier0(tmp_path: Path) -> None:
     validate_against_schema(payload)
 
 
+def test_run_submission_degrades_when_scratch_unavailable(
+    tmp_path: Path, monkeypatch
+) -> None:
+    dest = _flat_tier0(tmp_path)
+
+    def _raise_erofs(*_args, **_kwargs):
+        raise OSError(30, "Read-only file system")
+
+    monkeypatch.setattr("detector.compile.tempfile.mkdtemp", _raise_erofs)
+    objs = run_submission(dest, timeout_s=120)
+    assert len(objs) == 5
+    expected = {
+        "P1": "BENIGN",
+        "P2": "MALICIOUS",
+        "P3": "MALICIOUS",
+        "P4": "BENIGN",
+        "P5": "MALICIOUS",
+    }
+    got = {}
+    for item in objs:
+        for prefix in expected:
+            if item["file"].startswith(f"{prefix}_"):
+                got[prefix] = item["verdict"]
+                break
+    assert got == expected
+
+
 def test_docker_entry_mode_uses_output_dir(monkeypatch) -> None:
+    monkeypatch.delenv("DETECTOR_MODE", raising=False)
+    monkeypatch.setattr(docker_entry.os.path, "isdir", lambda path: path == "/output")
+    monkeypatch.setattr(docker_entry.os, "access", lambda path, mode: path == "/output")
+    assert docker_entry._mode() == "bench"
+    monkeypatch.setattr(docker_entry.os.path, "isdir", lambda path: False)
+    assert docker_entry._mode() == "submission"
+
+
+def test_docker_entry_mode_env_submission_overrides_writable_output(monkeypatch) -> None:
+    monkeypatch.setenv("DETECTOR_MODE", "submission")
+    monkeypatch.setattr(docker_entry.os.path, "isdir", lambda path: path == "/output")
+    monkeypatch.setattr(docker_entry.os, "access", lambda path, mode: path == "/output")
+    assert docker_entry._mode() == "submission"
+
+
+def test_docker_entry_mode_env_bench_overrides_missing_output(monkeypatch) -> None:
+    monkeypatch.setenv("DETECTOR_MODE", "bench")
+    monkeypatch.setattr(docker_entry.os.path, "isdir", lambda path: False)
+    monkeypatch.setattr(docker_entry.os, "access", lambda path, mode: False)
+    assert docker_entry._mode() == "bench"
+
+
+def test_docker_entry_mode_env_garbage_falls_back_to_auto(monkeypatch) -> None:
+    monkeypatch.setenv("DETECTOR_MODE", "garbage")
     monkeypatch.setattr(docker_entry.os.path, "isdir", lambda path: path == "/output")
     monkeypatch.setattr(docker_entry.os, "access", lambda path, mode: path == "/output")
     assert docker_entry._mode() == "bench"
