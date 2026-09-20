@@ -294,21 +294,21 @@ HoneyBadger corpora, Tier 3 contracts that look privileged (the five bounded Ope
 reflection / rescue fixtures must stay Benign; USDC FiatToken, Bancor SmartToken and Lido
 LDO MiniMe are preferred Malicious under decisive mode), and Tier 0 judge samples.
 
-<!-- BENCH NUMBERS: filled by orchestrator, 2026-09-20, image built from 6aee5fb; all-tier `bench run detector --repeat 2` in Docker `--network none` (reports/detector/) -->
+<!-- BENCH NUMBERS: filled by orchestrator, 2026-09-20, image e0a089bddd3a built from the hardening waves (solc SSOT, OZ v4/v5, any-uid runtime); all-tier `bench run detector --repeat 2` in Docker `--network none` (reports/detector/) -->
 
 | metric | value |
 | --- | --- |
 | Weighted score, all tiers (Tier 0 · 1 · 2 · 3 = 1.0 · 1.0 · 0.8909 · 0.9688) | **0.9714** |
 | Tier 0 (organizers' public set) | 5/5 exact, `reasons` on every file |
-| Tier 1 rule recall (67 cases, every `mal` twin fires its rule id) | 1.0 |
+| Tier 1 rule recall (71 cases incl. the OZ v4/v5 harness quartet, every `mal` twin fires its rule id) | 1.0 |
 | Tier 1 benign HIGH-FP rate | 0.0 |
 | Tier 3 HIGH-FP rate (five bounded fixtures Benign; USDC/Bancor Malicious; Lido `external_dependency`) | 0.0 |
-| Tier 2 family recall, compiling subset (A 0.978 · B 0.867 · C 1.0 · F 0.910; 779 files, 189 `compile_failed`) | 0.9146 |
+| Tier 2 family recall, compiling subset (A 0.978 · B 0.867 · C 1.0 · F 0.910; 779 files, 190 `compile_failed`) | 0.9146 |
 | Evidence hit rate (Tier 1 mal, `expected_functions`) | 1.0 |
 | `Uncertain` reasons observed across all tiers | `compile_failed`, `external_dependency` only |
 | Weighted score, Tier 1+3, vs `baseline_slither` / `baseline_keyword` | 0.9844 vs 0.5789 / 0.4222 |
-| Determinism (`--repeat 2`, 860 files, byte-identical `results.json`) | pass |
-| Runtime, Tier 1+3 in Docker (75 files) / all tiers (860 files), arm64 host under qemu | 35 s / 6.4 min per repeat |
+| Determinism (`--repeat 2`, 864 files, byte-identical `results.json`) | pass |
+| Runtime, Tier 1+3 in Docker (79 files) / all tiers (864 files), arm64 host under qemu | 35 s / 6.4 min per repeat on an idle host; 10.2 min with the host under load (same-file A/B of the hardening waves against `799361b`: +12 %) |
 
 Per-miss triage lives in `docs/bench/misses.md`; the corpus labels and weights are in `docs/specs/baybench.md`.
 

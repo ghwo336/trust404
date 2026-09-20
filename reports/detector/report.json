@@ -1,22 +1,22 @@
 {
   "tool": "detector",
-  "n_cases": 859,
+  "n_cases": 863,
   "scoring": {
     "tool": "detector",
     "tool_version": "0.1.0",
-    "n_cases": 859,
+    "n_cases": 863,
     "overall": {
-      "n_cases": 859,
-      "mean_verdict_score": 0.9008,
-      "family_recall": 0.9201,
+      "n_cases": 863,
+      "mean_verdict_score": 0.9012,
+      "family_recall": 0.9203,
       "rule_recall": 1.0,
       "high_fp_rate": 0.0,
       "evidence_hit_rate": 1.0,
-      "uncertain_rate": 0.2305,
+      "uncertain_rate": 0.2294,
       "missing_count": 0,
       "compile_fail_count": 190,
-      "runtime_p50": 381.913,
-      "runtime_p95": 381.913
+      "runtime_p50": 614.6753,
+      "runtime_p95": 614.6753
     },
     "weighted_score": 0.9714,
     "tier0_exact": {
@@ -38,13 +38,13 @@
         "runtime_p95": null
       },
       "tier1_pairs": {
-        "n_cases": 67,
+        "n_cases": 71,
         "mean_verdict_score": 1.0,
         "family_recall": 1.0,
         "rule_recall": 1.0,
         "high_fp_rate": 0.0,
         "evidence_hit_rate": 1.0,
-        "uncertain_rate": 0.0299,
+        "uncertain_rate": 0.0282,
         "missing_count": 0,
         "compile_fail_count": 1,
         "runtime_p50": null,
@@ -92,13 +92,13 @@
         "runtime_p95": null
       },
       "B": {
-        "n_cases": 107,
-        "mean_verdict_score": 0.965,
-        "family_recall": 0.8785,
+        "n_cases": 108,
+        "mean_verdict_score": 0.9653,
+        "family_recall": 0.8796,
         "rule_recall": 1.0,
         "high_fp_rate": null,
         "evidence_hit_rate": 1.0,
-        "uncertain_rate": 0.0561,
+        "uncertain_rate": 0.0556,
         "missing_count": 0,
         "compile_fail_count": 0,
         "runtime_p50": null,
@@ -1928,6 +1928,112 @@
         ],
         "fired_families": [
           "A"
+        ],
+        "exact": true
+      },
+      {
+        "id": "tier1/_harness/oz_v4_security_pausable",
+        "tier": "tier1_pairs",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign"
+        ],
+        "actual": "Benign",
+        "score": 1.0,
+        "missing": false,
+        "reason": "",
+        "uncertain": false,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [
+          "EXIT_GLOBAL_SWITCH",
+          "PRIV_ROLE"
+        ],
+        "fired_families": [
+          "A"
+        ],
+        "exact": true
+      },
+      {
+        "id": "tier1/_harness/oz_v5_capped_mint",
+        "tier": "tier1_pairs",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign"
+        ],
+        "actual": "Benign",
+        "score": 1.0,
+        "missing": false,
+        "reason": "",
+        "uncertain": false,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [
+          "BAL_PRIV_MINT",
+          "PRIV_ROLE"
+        ],
+        "fired_families": [
+          "A",
+          "B"
+        ],
+        "exact": true
+      },
+      {
+        "id": "tier1/_harness/oz_v5_pausable",
+        "tier": "tier1_pairs",
+        "preferred": "Benign",
+        "accepted": [
+          "Benign"
+        ],
+        "actual": "Benign",
+        "score": 1.0,
+        "missing": false,
+        "reason": "",
+        "uncertain": false,
+        "compile_fail": false,
+        "family_hit": null,
+        "rule_hit": null,
+        "evidence_hit": null,
+        "high_fp": false,
+        "fired_rule_ids": [
+          "EXIT_GLOBAL_SWITCH",
+          "PRIV_ROLE"
+        ],
+        "fired_families": [
+          "A"
+        ],
+        "exact": true
+      },
+      {
+        "id": "tier1/_harness/oz_v5_unbounded_mint",
+        "tier": "tier1_pairs",
+        "preferred": "Malicious",
+        "accepted": [
+          "Malicious"
+        ],
+        "actual": "Malicious",
+        "score": 1.0,
+        "missing": false,
+        "reason": "",
+        "uncertain": false,
+        "compile_fail": false,
+        "family_hit": true,
+        "rule_hit": true,
+        "evidence_hit": true,
+        "high_fp": null,
+        "fired_rule_ids": [
+          "BAL_PRIV_MINT",
+          "PRIV_ROLE"
+        ],
+        "fired_families": [
+          "A",
+          "B"
         ],
         "exact": true
       },
@@ -23611,8 +23717,8 @@
         "n_benign": 8
       },
       "B": {
-        "n_cases": 174,
-        "n_malicious": 107,
+        "n_cases": 175,
+        "n_malicious": 108,
         "n_benign": 5
       },
       "C": {
@@ -23680,7 +23786,7 @@
       },
       "BAL_PRIV_MINT": {
         "family": "B",
-        "n_cases": 2
+        "n_cases": 3
       },
       "BAL_PRIV_BURN_OTHER": {
         "family": "B",
@@ -23883,10 +23989,10 @@
     },
     "tier1_unknown_rule_dirs": [],
     "rules_missing_pair": [],
-    "n_cases": 859,
+    "n_cases": 863,
     "per_tier": {
       "tier0_judge": 5,
-      "tier1_pairs": 67,
+      "tier1_pairs": 71,
       "tier2_realworld": 779,
       "tier3_benign_risky": 8
     }
@@ -24769,7 +24875,7 @@
     "diffs": []
   },
   "runtime": {
-    "p50": 381.913,
-    "p95": 381.913
+    "p50": 614.6753,
+    "p95": 614.6753
   }
 }
