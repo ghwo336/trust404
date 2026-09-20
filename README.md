@@ -1,5 +1,42 @@
 # BAYBENCH
 
+## TRUST404 Track 1 submission — judges start here
+
+Offline static analysis on Slither IR: privilege → state → transfer-path/exit reasoning. Each `.sol` file gets a `MALICIOUS` / `BENIGN` / `UNCERTAIN` verdict with function+line evidence. stdout is exactly one JSON array; logs go to stderr.
+
+### Get the runtime
+
+1. `docker load < trust404-detector-amd64.tar.gz` (GitHub release asset) or `docker pull ghcr.io/sdh2222/trust404-detector@sha256:<DIGEST-TBD>`
+2. `docker build --platform linux/amd64 -f detector/Dockerfile -t trust404/detector:latest .`
+3. `scripts/setup_local.sh`
+
+### Run
+
+```bash
+./run.sh ./cases > out.json
+docker run --rm --network none -e DETECTOR_MODE=submission \
+  -v "$PWD/cases":/input:ro trust404/detector:latest > out.json
+```
+
+### Validate
+
+```bash
+check-jsonschema --schemafile detector/schema/judge.schema.json out.json
+scripts/judge_smoke.sh ./cases
+```
+
+### Guarantees
+
+- No network at runtime (all solc binaries, Python deps, and OpenZeppelin are vendored in the image).
+- Works as any uid and on a read-only rootfs.
+- Fits 2 vCPU / 4 GB / 10 min (480 s global budget, 120 s per file; files past the budget are emitted as UNCERTAIN rather than dropped).
+- Exit 0 even when some files fail.
+- UNCERTAIN only for compile failure / timeout / analysis error / unresolvable external dependency.
+
+Verdict derivation: [detector/README.md](detector/README.md). Spec: [docs/specs/detector.md](docs/specs/detector.md).
+
+## BAYBENCH harness
+
 Offline harness for TRUST404 Track 1 detectors. A tool is a black box: it reads a directory of `.sol` files and writes one `results.json`. BAYBENCH scores that output identically for every teammate, then lists the misses to iterate on. Pattern and rule IDs come from [docs/research/track1-malice-patterns.md](docs/research/track1-malice-patterns.md); the spec is [docs/specs/baybench.md](docs/specs/baybench.md).
 
 ## Install

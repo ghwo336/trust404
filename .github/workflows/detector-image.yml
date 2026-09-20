@@ -1,0 +1,147 @@
+name: detector-image
+
+"on":
+  workflow_dispatch:
+  push:
+    tags:
+      - "submission-*"
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    env:
+      IMAGE: ghcr.io/${{ github.repository_owner }}/trust404-detector
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: detector/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ github.ref_name }}
+            ${{ env.IMAGE }}:latest
+
+      - name: Retag for run.sh
+        run: |
+          DIGEST="${{ steps.push.outputs.digest }}"
+          echo "DIGEST=${DIGEST}" >> "$GITHUB_ENV"
+          docker pull "${IMAGE}@${DIGEST}"
+          docker tag "${IMAGE}@${DIGEST}" trust404/detector:latest
+
+      - name: Hardened smoke matrix
+        run: |
+          set -euo pipefail
+          pip install check-jsonschema
+          mkdir -p in
+          cp cases/tier0_judge/*/*.sol in/
+          export DETECTOR_IMAGE=trust404/detector:latest
+          ./run.sh in > out1.json
+          scripts/judge_smoke.sh in
+          docker run --rm --network none --user 1000:1000 \
+            -e DETECTOR_MODE=submission \
+            -v "$PWD/in":/input:ro \
+            trust404/detector:latest > out2.json
+          docker run --rm --network none --user 65534:65534 \
+            --read-only --tmpfs /tmp --cap-drop ALL \
+            --security-opt no-new-privileges \
+            --memory 4g --cpus 2 --pids-limit 512 \
+            -e DETECTOR_MODE=submission \
+            -v "$PWD/in":/input:ro \
+            trust404/detector:latest > out3.json
+          check-jsonschema --schemafile detector/schema/judge.schema.json out1.json
+          check-jsonschema --schemafile detector/schema/judge.schema.json out2.json
+          check-jsonschema --schemafile detector/schema/judge.schema.json out3.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          def check(path: str) -> None:
+              obj = json.loads(Path(path).read_text(encoding="utf-8"))
+              assert isinstance(obj, list) and len(obj) == 5, path
+              for row in obj:
+                  name = row["file"]
+                  verdict = row["verdict"]
+                  if name.startswith("P1") or name.startswith("P4"):
+                      assert verdict == "BENIGN", (path, name, verdict)
+                  elif name.startswith("P2") or name.startswith("P3") or name.startswith("P5"):
+                      assert verdict == "MALICIOUS", (path, name, verdict)
+                  else:
+                      raise AssertionError((path, name))
+
+          for path in ("out1.json", "out2.json", "out3.json"):
+              check(path)
+          PY
+          cmp out1.json out2.json
+          cmp out1.json out3.json
+
+      - name: Save amd64 tarball
+        run: |
+          docker save trust404/detector:latest | gzip > trust404-detector-amd64.tar.gz
+          sha256sum trust404-detector-amd64.tar.gz | tee tarball.sha256
+          echo "TARBALL_SHA256=$(cut -d' ' -f1 tarball.sha256)" >> "$GITHUB_ENV"
+
+      - name: Publish release asset
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" trust404-detector-amd64.tar.gz --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" --notes "digest: $DIGEST" trust404-detector-amd64.tar.gz
+          fi
+
+      - name: Upload tarball artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: trust404-detector-amd64
+          path: trust404-detector-amd64.tar.gz
+          retention-days: 14
+
+      - name: Job summary
+        run: |
+          {
+            echo "- image: \`${IMAGE}:latest\`"
+            echo "- digest: \`${DIGEST}\`"
+            echo "- tarball sha256: \`${TARBALL_SHA256}\`"
+            echo
+            python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          for label, path in (
+              ("out1 judge_smoke/run.sh", "out1.json"),
+              ("out2 uid 1000", "out2.json"),
+              ("out3 hardened", "out3.json"),
+          ):
+              print(f"### {label}")
+              print()
+              print("| file | verdict |")
+              print("| --- | --- |")
+              obj = json.loads(Path(path).read_text(encoding="utf-8"))
+              for row in obj:
+                  print(f"| {row['file']} | {row['verdict']} |")
+              print()
+          PY
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -423,4 +423,4 @@ def test_readme_lists_every_catalog_rule_with_its_title() -> None:
         assert f"Family {family} — {title}" in readme
     assert "docker run --rm --network none" in readme
     assert "python -m detector.cli" in readme
-    assert "<!-- BENCH NUMBERS: filled by orchestrator -->" in readme
+    assert "<!-- BENCH NUMBERS: filled by orchestrator" in readme

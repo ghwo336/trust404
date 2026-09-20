@@ -11,52 +11,9 @@ the transfer path, the balance mapping, or an ETH/token exit. It never reads ide
 (a blacklist called `_isBot` and a switch called `i` are found the same way), it needs no
 network, and the same input always produces byte-identical output.
 
-## Quick start
-
-Docker (the judging form; the image bundles Python, Slither, pinned `solc` binaries and a
-vendored OpenZeppelin tree, so `--network none` is safe):
-
-```bash
-docker build -f detector/Dockerfile -t trust404/detector:latest .
-mkdir -p in out && cp path/to/*.sol in/
-docker run --rm --network none \
-  -v "$PWD/in:/input:ro" -v "$PWD/out:/output" \
-  trust404/detector:latest
-```
-
-Local (needs `pip install -r detector/requirements.txt`, `solc-select install` of the versions
-below, and `vendor/openzeppelin-contracts` or `DETECTOR_OZ_DIR` pointing at an OpenZeppelin
-checkout):
-
-```bash
-PYTHONPATH=. python -m detector.cli in out/results.json [--timeout 120] [--no-summary]
-```
-
-- Input: any directory tree; every `*.sol` under it is analysed (recursively, sorted by path).
-  A file is compiled in isolation with its relative imports and `@openzeppelin/` remapped.
-- Output: `out/results.json` — the Track 1 submission format, validated against
-  `detector/schema/result.schema.json` before it is written — and `out/summary.md`, the
-  human-readable report described below.
-- Bundled `solc`: 0.4.26, 0.5.17, 0.6.12, 0.7.6, 0.8.20 and 0.8.24 through 0.8.37. The
-  version is chosen from the file's `pragma` constraints (default 0.8.20); a bounded retry
-  ladder relaxes an over-strict pragma or a duplicate SPDX line, and a file that still does
-  not compile is reported as `Uncertain(compile_failed)` rather than dropped.
-- Exit code is 0 whenever `results.json` was written, even if every file is Uncertain.
-
-### Reading `summary.md`
-
-The report opens with a three-line legend (verdicts, severities, counts) and an overview
-table — one row per file, Malicious first — whose `why` column is a plain sentence derived from
-the verdict, its reason code and the findings. Each file then gets a section with its findings
-grouped HIGH → MED → INFO in tables of `rule | title | where | lines | evidence`; `where` is
-`Contract.function`, `lines` are compressed ranges, and `evidence` is the structural reason
-plus, when a bounding discriminator moved a finding to INFO, a note such as
-`downgraded HIGH→INFO: supply is capped by a constant`. More than six role-gated
-functions are collapsed into one line with a `<details>` block.
-
 ## Submission mode (how the judges run it)
 
-The organizers take a **directory**, analyse every `*.sol` **directly under it** (not subdirectories), and score **exactly one JSON array on stdout**. Logs go to stderr. Bench mode above is unchanged: two positional arguments still write `results.json` + `summary.md`.
+The organizers take a **directory**, analyse every `*.sol` **directly under it** (not subdirectories), and score **exactly one JSON array on stdout**. Logs go to stderr. Bench mode below is unchanged: two positional arguments still write `results.json` + `summary.md`.
 
 ```bash
 ./run.sh ./cases > out.json
@@ -112,6 +69,75 @@ Each array element is one input basename:
 **Budget / timeout.** The grader kills the process at 10 minutes. Submission mode keeps an 8-minute wall budget (`--budget`, default 480 s) and the usual per-file `--timeout` (default 120 s). When the budget is exhausted, remaining files are emitted as `UNCERTAIN` with reason `global time budget exhausted before this file was analysed` and the array is still printed (exit 0). A file that fails to parse or compile is `UNCERTAIN` and the batch continues.
 
 **stdout / stderr.** After argument parsing, submission mode duplicates fd 1, points fd 1 and `sys.stdout` at stderr, and writes the JSON array only to the saved stdout descriptor. solc / crytic-compile / Slither / worker logs therefore cannot corrupt the array. `DETECTOR_LOG_LEVEL` (default `INFO`) controls verbosity on stderr.
+
+## Quick start
+
+Docker (the image bundles Python, Slither, pinned `solc` binaries and a vendored
+OpenZeppelin tree, so `--network none` is safe). Submission form first:
+
+```bash
+docker build -f detector/Dockerfile -t trust404/detector:latest .
+mkdir -p in && cp path/to/*.sol in/
+docker run --rm --network none -e DETECTOR_MODE=submission \
+  -v "$PWD/in:/input:ro" \
+  trust404/detector:latest > out.json
+```
+
+BAYBENCH bench mode (writes results.json + summary.md; prints nothing on stdout) — not for judging:
+
+```bash
+mkdir -p in out && cp path/to/*.sol in/
+docker run --rm --network none \
+  -v "$PWD/in:/input:ro" -v "$PWD/out:/output" \
+  trust404/detector:latest
+```
+
+Local (needs `pip install -r detector/requirements.txt`, `solc-select install` of the versions
+below, and `vendor/openzeppelin-contracts` or `DETECTOR_OZ_DIR` pointing at an OpenZeppelin
+checkout):
+
+```bash
+PYTHONPATH=. python -m detector.cli in out/results.json [--timeout 120] [--no-summary]
+```
+
+- Input: any directory tree; every `*.sol` under it is analysed (recursively, sorted by path).
+  A file is compiled in isolation with its relative imports and `@openzeppelin/` remapped.
+- Output: `out/results.json` — the Track 1 submission format, validated against
+  `detector/schema/result.schema.json` before it is written — and `out/summary.md`, the
+  human-readable report described below.
+- Bundled `solc` (`detector/solc_versions.txt` is the single source of truth, read by the
+  Dockerfile and `scripts/setup_local.sh`): 0.4.24–0.4.26, 0.5.16–0.5.17, 0.6.6, 0.6.12,
+  0.7.6, and every 0.8.0 through 0.8.37 — 46 binaries. The
+  version is chosen from the file's `pragma` constraints (default 0.8.20); a bounded retry
+  ladder relaxes an over-strict pragma or a duplicate SPDX line, and a file that still does
+  not compile is reported as `Uncertain(compile_failed)` rather than dropped.
+- OpenZeppelin v4 and v5 trees are vendored (`vendor/openzeppelin-contracts`,
+  `vendor/openzeppelin-contracts-v5`) and chosen per file.
+- Exit code is 0 whenever `results.json` was written, even if every file is Uncertain.
+
+### Reading `summary.md`
+
+The report opens with a three-line legend (verdicts, severities, counts) and an overview
+table — one row per file, Malicious first — whose `why` column is a plain sentence derived from
+the verdict, its reason code and the findings. Each file then gets a section with its findings
+grouped HIGH → MED → INFO in tables of `rule | title | where | lines | evidence`; `where` is
+`Contract.function`, `lines` are compressed ranges, and `evidence` is the structural reason
+plus, when a bounding discriminator moved a finding to INFO, a note such as
+`downgraded HIGH→INFO: supply is capped by a constant`. More than six role-gated
+functions are collapsed into one line with a `<details>` block.
+
+## Environment variables
+
+- `DETECTOR_IMAGE` — image `run.sh` prefers; default `trust404/detector:latest`. If that tag is absent locally, `run.sh` also tries `ghcr.io/sdh2222/trust404-detector:latest` (local inspect only; never pulls).
+- `DETECTOR_NO_DOCKER` — if set, skip Docker and use a local interpreter.
+- `DETECTOR_PYTHON` — interpreter for the local path; if unset, `${ROOT}/.venv/bin/python` when executable, else `python3`.
+- `DETECTOR_MODE` — `submission` or `bench`; docker_entry override. Unset = auto-detect (writable `/output` → bench, otherwise submission).
+- `DETECTOR_SOLC_ARTIFACTS` — solc artifact root (solc-select layout). Unset = default solc-select locations.
+- `DETECTOR_OZ_DIR` — OpenZeppelin v4 tree; default `vendor/openzeppelin-contracts`.
+- `DETECTOR_OZ_V5_DIR` — OpenZeppelin v5 tree; default `vendor/openzeppelin-contracts-v5`.
+- `DETECTOR_SCRATCH_DIR` — scratch directory for per-file compile copies. Unset = a temporary directory for the batch.
+- `DETECTOR_LOG_LEVEL` — logging level on stderr; default `INFO`.
+- `DETECTOR_VALIDATE` — if `1`, validate the stdout array against the judge schema before printing.
 
 ## How a verdict is derived
 
