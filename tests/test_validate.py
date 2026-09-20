@@ -86,3 +86,45 @@ def test_compile_case_unexpected_fail(tmp_path: Path) -> None:
     success, log = compile_case(case, REPO_ROOT)
     assert success is False
     assert isinstance(log, str)
+
+
+def _tier1_case(case_id: str) -> Case:
+    return next(c for c in load_cases(REPO_ROOT / "cases", ["1"]) if c.id == case_id)
+
+
+@pytest.mark.skipif(NEED_SOLC_0820, reason="solc 0.8.20 not installed")
+def test_compile_case_oz_v5_pausable() -> None:
+    success, log = compile_case(_tier1_case("tier1/_harness/oz_v5_pausable"), REPO_ROOT)
+    assert success is True
+    assert "oz=v5" in log
+
+
+@pytest.mark.skipif(NEED_SOLC_0820, reason="solc 0.8.20 not installed")
+def test_compile_case_oz_v4_security_pausable() -> None:
+    success, log = compile_case(_tier1_case("tier1/_harness/oz_v4_security_pausable"), REPO_ROOT)
+    assert success is True
+    assert "oz=v4" in log
+
+
+@pytest.mark.skipif(NEED_SOLC_0820, reason="solc 0.8.20 not installed")
+def test_compile_case_oz_import() -> None:
+    success, log = compile_case(_tier1_case("tier1/_harness/oz_import"), REPO_ROOT)
+    assert success is True
+    assert "oz=v4" in log
+
+
+@pytest.mark.skipif(NEED_SOLC_0820, reason="solc 0.8.20 not installed")
+def test_compile_case_expect_fail_on_both_oz_trees(tmp_path: Path) -> None:
+    case = _write_case(
+        tmp_path,
+        "oz_broken",
+        (
+            "pragma solidity 0.8.20;\n"
+            'import "@openzeppelin/contracts/token/ERC20/ERC20.sol";\n'
+            "contract Tiny { this is not solidity\n"
+        ),
+        notes="expect_compile_fail",
+    )
+    success, log = compile_case(case, REPO_ROOT)
+    assert success is True
+    assert "expected_fail" in log

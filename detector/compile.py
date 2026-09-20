@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import re
 import shutil
@@ -14,32 +15,17 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from slither import Slither
+from solc_select.constants import ARTIFACTS_DIR as SOLC_SELECT_ARTIFACTS_DIR
 
-INSTALLED_SOLC = (
-    "0.4.26",
-    "0.5.17",
-    "0.6.12",
-    "0.7.6",
-    "0.8.20",
-    # Contiguous 0.8.24..0.8.37 so an exact `pragma solidity 0.8.3x;` in a recent sample
-    # resolves to a real binary instead of a nearest-minor mismatch (compile_failed).
-    "0.8.24",
-    "0.8.25",
-    "0.8.26",
-    "0.8.27",
-    "0.8.28",
-    "0.8.29",
-    "0.8.30",
-    "0.8.31",
-    "0.8.32",
-    "0.8.33",
-    "0.8.34",
-    "0.8.35",
-    "0.8.36",
-    "0.8.37",
+logger = logging.getLogger(__name__)
+
+INSTALLED_SOLC: tuple[str, ...] = tuple(
+    line.strip()
+    for line in Path(__file__).with_name("solc_versions.txt").read_text(encoding="utf-8").splitlines()
+    if line.strip()
 )
 DEFAULT_SOLC = "0.8.20"
-SOLC_ARTIFACTS = Path.home() / ".solc-select" / "artifacts"
+SOLC_ARTIFACTS_ENV = "DETECTOR_SOLC_ARTIFACTS"
 
 # Retry ladder knobs (see docs/specs/detector.md, "Retry ladder").
 MAX_SOLC_ATTEMPTS = 5
@@ -88,6 +74,7 @@ class CompileResult:
     note: str | None
     source_path: Path
     canonical_path: Path
+    oz_tag: str | None = None
 
 
 def _ver_tuple(version: str) -> Version:
@@ -200,13 +187,11 @@ def _nearest_same_minor(requested: Version) -> str:
 def pick_solc(source: str) -> str:
     """Pick an installed solc for `source`.
 
-    Rule: parse every `pragma solidity` statement (all must hold; `||` alternatives inside one
-    statement are OR-ed). Prefer DEFAULT_SOLC whenever it satisfies; otherwise the LOWEST
-    satisfying installed version (old code written for 0.4 usually breaks under 0.5 semantics,
-    and the oldest satisfying patch is closest to what the author tested); otherwise the legacy
-    nearest-same-minor of the first version literal (default 0.8.20 for an unknown minor). The
-    legacy fallback is what makes an exact `0.4.24` pick 0.4.26 — solc then rejects the pragma
-    and the retry ladder relaxes it.
+    Parse every `pragma solidity` statement (AND across statements; `||` OR-ed inside one).
+    Prefer DEFAULT_SOLC when it satisfies. Else among satisfying pins take the lowest
+    satisfying minor (breaking changes land at minor boundaries) and the highest satisfying
+    patch on that minor (features accrue inside a minor; `address[] calldata` needs 0.6.9+).
+    Else the legacy nearest-same-minor of the first literal (unknown minor → DEFAULT_SOLC).
     """
     exprs = _pragma_exprs(source)
     if not exprs:
@@ -217,38 +202,102 @@ def pick_solc(source: str) -> str:
         if DEFAULT_SOLC in satisfying:
             return DEFAULT_SOLC
         if satisfying:
-            return min(satisfying, key=_ver_tuple)
+            def rank(ver: str) -> tuple[int, int, int]:
+                major, minor, patch = _ver_tuple(ver)
+                return (major, minor, -patch)
+
+            return min(satisfying, key=rank)
     found = _VERSION_RE.findall(exprs[0])
     if not found:
         return DEFAULT_SOLC
     return _nearest_same_minor(_ver_tuple(found[0]))
 
 
+def solc_artifact_roots() -> list[Path]:
+    override = os.environ.get(SOLC_ARTIFACTS_ENV, "").strip()
+    candidates: list[Path] = []
+    if override:
+        candidates.append(Path(override))
+    candidates.append(SOLC_SELECT_ARTIFACTS_DIR)
+    candidates.append(Path.home() / ".solc-select" / "artifacts")
+    roots: list[Path] = []
+    seen: set[str] = set()
+    for path in candidates:
+        key = str(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        roots.append(path)
+    return roots
+
+
 def solc_binary(version: str) -> Path:
-    return SOLC_ARTIFACTS / f"solc-{version}" / f"solc-{version}"
+    roots = solc_artifact_roots()
+    rel = Path(f"solc-{version}") / f"solc-{version}"
+    for root in roots:
+        candidate = root / rel
+        if candidate.is_file():
+            return candidate
+    return roots[0] / rel
 
 
-def _oz_dir() -> Path | None:
-    env = os.environ.get("DETECTOR_OZ_DIR")
+OZ_DIR_ENV = "DETECTOR_OZ_DIR"
+OZ_V5_DIR_ENV = "DETECTOR_OZ_V5_DIR"
+_OZ_IMPORT_PREFIX = "@openzeppelin/contracts/"
+
+
+def _oz_tree_dir(env_name: str, vendor_name: str) -> Path | None:
+    env = os.environ.get(env_name)
     if env is not None and not env.strip():
         return None
-    candidates = []
+    candidates: list[Path] = []
     if env:
         candidates.append(Path(env))
     repo = Path(__file__).resolve().parents[1]
-    candidates.append(repo / "vendor" / "openzeppelin-contracts")
-    candidates.append(Path("/app/vendor/openzeppelin-contracts"))
+    candidates.append(repo / "vendor" / vendor_name)
+    candidates.append(Path("/app/vendor") / vendor_name)
     for candidate in candidates:
         if candidate.is_dir():
             return candidate
     return None
 
 
-def oz_remapping() -> str | None:
-    vendor = _oz_dir()
+def oz_trees() -> list[tuple[str, Path]]:
+    trees: list[tuple[str, Path]] = []
+    v4 = _oz_tree_dir(OZ_DIR_ENV, "openzeppelin-contracts")
+    if v4 is not None:
+        trees.append(("v4", v4))
+    v5 = _oz_tree_dir(OZ_V5_DIR_ENV, "openzeppelin-contracts-v5")
+    if v5 is not None:
+        trees.append(("v5", v5))
+    return trees
+
+
+def oz_remapping(tree: Path | None = None) -> str | None:
+    vendor = tree
+    if vendor is None:
+        vendor = next((path for tag, path in oz_trees() if tag == "v4"), None)
     if vendor is None:
         return None
     return f"@openzeppelin/contracts/={vendor.as_posix()}/"
+
+
+def rank_oz_trees(source: str, trees: list[tuple[str, Path]]) -> list[tuple[str, Path]]:
+    rels = [
+        spec[len(_OZ_IMPORT_PREFIX) :]
+        for spec in _imported_specs(source)
+        if spec.startswith(_OZ_IMPORT_PREFIX)
+    ]
+    if not rels:
+        return list(trees)
+
+    def score(item: tuple[str, Path]) -> tuple[int, int]:
+        _tag, path = item
+        resolved = sum(1 for rel in rels if (path / rel).is_file())
+        all_resolve = 1 if resolved == len(rels) else 0
+        return (-all_resolve, -resolved)
+
+    return sorted(trees, key=score)
 
 
 def _parse_remap_line(line: str) -> tuple[str, str] | None:
@@ -365,8 +414,10 @@ def _allow_entries(path: Path) -> list[str]:
     return [raw] if raw == resolved else [raw, resolved]
 
 
-def _resolve_compile_paths(root: Path, source: str) -> tuple[list[str], list[str]]:
-    """Project remaps, then imported auto-maps, then the vendored OZ remap; first prefix wins."""
+def _resolve_compile_paths(
+    root: Path, source: str, oz: Path | None
+) -> tuple[list[str], list[str]]:
+    """Project remaps, then imported auto-maps, then the chosen OZ remap; first prefix wins."""
     pairs = list(_project_remappings(root))
     prefixes = [prefix for prefix, _target in pairs]
     for spec in _imported_specs(source):
@@ -377,9 +428,9 @@ def _resolve_compile_paths(root: Path, source: str) -> tuple[list[str], list[str
             continue
         pairs.append(auto)
         prefixes.append(auto[0])
-    oz = oz_remapping()
-    if oz is not None:
-        prefix, _, target = oz.partition("=")
+    oz_remap = oz_remapping(oz) if oz is not None else None
+    if oz_remap is not None:
+        prefix, _, target = oz_remap.partition("=")
         if not _any_covers(prefixes, prefix):
             pairs.append((prefix, target if target.endswith("/") else f"{target}/"))
     pairs.sort(key=lambda item: (-len(item[0]), item[0]))
@@ -456,22 +507,32 @@ def cleanup_temp_copies(path: Path) -> list[Path]:
 
 
 @contextmanager
-def scratch_session() -> Iterator[Path]:
+def scratch_session() -> Iterator[Path | None]:
     """Own a `$DETECTOR_SCRATCH_DIR` for the batch (no-op when the parent already set one)."""
     previous = os.environ.get(SCRATCH_ENV)
     if previous:
         yield Path(previous)
         return
-    created = tempfile.mkdtemp(prefix=SCRATCH_PREFIX)
-    os.environ[SCRATCH_ENV] = created
+    created = None
     try:
+        try:
+            created = tempfile.mkdtemp(prefix=SCRATCH_PREFIX)
+        except OSError as exc:
+            logger.warning(
+                "scratch dir unavailable (%s); ladder rewrite rungs disabled for this run",
+                exc,
+            )
+            yield None
+            return
+        os.environ[SCRATCH_ENV] = created
         yield Path(created)
     finally:
-        try:
-            shutil.rmtree(created, ignore_errors=True)
-        except OSError:
-            pass
-        os.environ.pop(SCRATCH_ENV, None)
+        if created is not None:
+            try:
+                shutil.rmtree(created, ignore_errors=True)
+            except OSError:
+                pass
+            os.environ.pop(SCRATCH_ENV, None)
 
 
 def _should_mirror_file(path: Path) -> bool:
@@ -602,7 +663,9 @@ def _first_error_line(error: str) -> str:
     return error[:200]
 
 
-def _note(fixes: set[str], pragmas: list[str], version: str) -> str:
+def _note(
+    fixes: set[str], pragmas: list[str], version: str, oz_tag: str | None = None
+) -> str:
     parts: list[str] = []
     if _FIX_BOM in fixes:
         parts.append("BOM stripped")
@@ -613,8 +676,31 @@ def _note(fixes: set[str], pragmas: list[str], version: str) -> str:
         parts.append("duplicate SPDX identifiers removed")
     if not pragmas:
         parts.append("no pragma")
+    if oz_tag:
+        parts.append(f"oz={oz_tag}")
     parts.append(f"compiled with {version}")
     return "; ".join(parts)
+
+
+def _newest_installed_08() -> str:
+    return max(
+        (ver for ver in INSTALLED_SOLC if _ver_tuple(ver)[:2] == (0, 8)),
+        key=_ver_tuple,
+    )
+
+
+def _error_names_oz_tree(error: str, oz: Path | None) -> bool:
+    if oz is None or not error:
+        return False
+    resolved = oz.resolve()
+    for text in (str(resolved), resolved.as_posix(), str(oz), oz.as_posix()):
+        if text and text in error:
+            return True
+    return "@openzeppelin/contracts" in error
+
+
+def _has_oz_import(source: str) -> bool:
+    return any(spec.startswith("@openzeppelin/") for spec in _imported_specs(source))
 
 
 def _build_slither(
@@ -623,6 +709,7 @@ def _build_slither(
     allow_root: Path,
     remaps: list[str],
     extra_allow: list[str],
+    oz: Path | None,
 ) -> Slither:
     solc_bin = solc_binary(version)
     if not solc_bin.is_file():
@@ -633,7 +720,6 @@ def _build_slither(
         if part not in seen:
             seen.add(part)
             allow_parts.append(part)
-    oz = _oz_dir()
     if oz is not None:
         oz_s = str(oz.resolve())
         if oz_s not in seen:
@@ -655,11 +741,13 @@ class _Ladder:
         allow_root: Path,
         remaps: list[str],
         extra_allow: list[str],
+        oz: Path | None,
     ) -> None:
         self.canonical = canonical
         self.allow_root = allow_root
         self.remaps = remaps
         self.extra_allow = extra_allow
+        self.oz = oz
         self.log: list[str] = []
 
     @property
@@ -670,7 +758,7 @@ class _Ladder:
         """Return a Slither on success, else the error text."""
         try:
             slither = _build_slither(
-                target, version, self.allow_root, self.remaps, self.extra_allow
+                target, version, self.allow_root, self.remaps, self.extra_allow, self.oz
             )
         except CompileError as exc:  # missing binary: recorded, does not spawn solc
             self.log.append(f"{version} on {target.name}: {exc}")
@@ -686,10 +774,11 @@ class _Ladder:
 class _Scratch:
     """Lazy per-file scratch mirror of `allow_root`; created only when a rewrite rung runs."""
 
-    def __init__(self, canonical: Path, allow_root: Path, source: str) -> None:
+    def __init__(self, canonical: Path, allow_root: Path, source: str, oz: Path | None) -> None:
         self.canonical = canonical
         self.allow_root = allow_root
         self.source = source
+        self.oz = oz
         self.owned_scratch: Path | None = None
         self.mirror_dir: Path | None = None
         self.mirror_root: Path | None = None
@@ -714,7 +803,7 @@ class _Scratch:
                 rel = Path(self.canonical.name)
             self.mirror_target = self.mirror_root / rel
             _mirror_input_root(self.allow_root, self.mirror_root, skip=self.canonical)
-            remaps, extra_allow = _resolve_compile_paths(self.mirror_root, self.source)
+            remaps, extra_allow = _resolve_compile_paths(self.mirror_root, self.source, self.oz)
             ladder.allow_root = self.mirror_root
             ladder.remaps = remaps
             ladder.extra_allow = extra_allow
@@ -730,6 +819,9 @@ def _climb_ladder(
     first_error: str,
     fixes: set[str],
     scratch: _Scratch,
+    *,
+    oz: Path | None,
+    oz_tag: str | None,
 ) -> CompileResult | None:
     """Rewrite rungs write into a scratch mirror of the input root, never into the input itself."""
     error = first_error
@@ -737,19 +829,48 @@ def _climb_ladder(
     fixes |= _fixes_for(error, has_pragma=bool(pragmas))
     applied: set[str] = set()
     target = canonical
+    oz_switched = False
     while not ladder.exhausted:
+        if (
+            not oz_switched
+            and oz is not None
+            and _RELAX_MARKER in error
+            and _error_names_oz_tree(error, oz)
+        ):
+            newest = _newest_installed_08()
+            if newest != version:
+                version = newest
+                oz_switched = True
+                outcome = ladder.attempt(target, version)
+                if isinstance(outcome, Slither):
+                    return CompileResult(
+                        outcome,
+                        version,
+                        _note(applied, pragmas, version, oz_tag),
+                        target,
+                        canonical,
+                        oz_tag,
+                    )
+                error = outcome
+                fixes |= _fixes_for(error, has_pragma=bool(pragmas))
+                continue
         if not (fixes - applied):
             break
         try:
             target = scratch.prepare(ladder, fixes)
         except OSError as exc:
-            ladder.log.append(f"could not mirror input root: {exc}")
+            ladder.log.append(f"no scratch: {exc}")
             break
         applied = set(fixes)
         outcome = ladder.attempt(target, version)
         if isinstance(outcome, Slither):
             return CompileResult(
-                outcome, version, _note(fixes, pragmas, version), target, canonical
+                outcome,
+                version,
+                _note(fixes, pragmas, version, oz_tag),
+                target,
+                canonical,
+                oz_tag,
             )
         error = outcome
         fixes |= _fixes_for(error, has_pragma=bool(pragmas))
@@ -768,7 +889,12 @@ def _climb_ladder(
             outcome = ladder.attempt(fallback, older)
             if isinstance(outcome, Slither):
                 return CompileResult(
-                    outcome, older, _note(fixes, pragmas, older), fallback, canonical
+                    outcome,
+                    older,
+                    _note(fixes, pragmas, older, oz_tag),
+                    fallback,
+                    canonical,
+                    oz_tag,
                 )
     return None
 
@@ -779,13 +905,16 @@ def compile_file_ex(path: Path, *, input_root: Path | None = None) -> CompileRes
     `input_root` is the directory given to the CLI (allow-paths + remappings). Tests that call
     `compile_file(path)` omit it; then allow-paths defaults to the file's parent as before.
 
-    Ladder (each rung is a fresh Slither construction; at most MAX_SOLC_ATTEMPTS in total):
+    Ladder (each rung is a fresh Slither construction; at most MAX_SOLC_ATTEMPTS per OZ tree):
       a. error says "requires different compiler version" -> scratch-mirror rewrite with every
          `pragma solidity` statement replaced by RELAXED_PRAGMA, same version;
       b. no pragma and the default fails -> NO_PRAGMA_LADDER versions in order;
       c. error says "Multiple SPDX license identifiers" -> scratch-mirror rewrite with all but
          the first SPDX comment blanked (combined with a. when both apply);
       BOM. source starts with a UTF-8 BOM -> scratch-mirror rewrite with the BOM stripped;
+      OZ-version: error names a path under the current OZ tree and says
+         "requires different compiler version" -> newest installed 0.8.x, then (a) if needed;
+      e. the whole ladder for the next ranked OZ tree (`oz <tag> failed: …`);
       d. anything else -> CompileError carrying the ORIGINAL first error plus the attempt log.
     Rewrites preserve line numbers. The input root is never written; the mirror is deleted
     before returning or raising. A file whose first attempt compiles never creates a mirror.
@@ -793,32 +922,69 @@ def compile_file_ex(path: Path, *, input_root: Path | None = None) -> CompileRes
     canonical = Path(path).resolve()
     allow_root = Path(input_root).resolve() if input_root is not None else canonical.parent
     source = canonical.read_text(encoding="utf-8", errors="replace")
-    remaps, extra_allow = _resolve_compile_paths(allow_root, source)
     pragmas = _pragma_exprs(source)
-    version = pick_solc(source)
-    if not solc_binary(version).is_file():
-        raise CompileError(f"solc {version}: binary not found at {solc_binary(version)}")
-
-    ladder = _Ladder(canonical, allow_root, remaps, extra_allow)
-    scratch = _Scratch(canonical, allow_root, source)
-    first_error = ""
-    try:
-        outcome = ladder.attempt(canonical, version)
-        if isinstance(outcome, Slither):
-            return CompileResult(outcome, version, None, canonical, canonical)
-        first_error = outcome
-        fixes: set[str] = set()
-        if source.startswith("\ufeff"):
-            fixes.add(_FIX_BOM)
-        rescued = _climb_ladder(
-            ladder, canonical, pragmas, version, first_error, fixes, scratch
+    version_picked = pick_solc(source)
+    if not solc_binary(version_picked).is_file():
+        raise CompileError(
+            f"solc {version_picked}: binary not found at {solc_binary(version_picked)}"
         )
-        if rescued is not None:
-            return rescued
-    finally:
-        scratch.close()
+
+    has_oz = _has_oz_import(source)
+    ranked = rank_oz_trees(source, oz_trees())
+    if not ranked:
+        worklist: list[tuple[str | None, Path | None]] = [(None, None)]
+    elif has_oz:
+        worklist = list(ranked)
+    else:
+        worklist = [ranked[0]]
+
+    combined_log: list[str] = []
+    first_error_overall = ""
+    first_version = version_picked
+
+    for tree_index, (tag, tree) in enumerate(worklist):
+        remaps, extra_allow = _resolve_compile_paths(allow_root, source, tree)
+        version = version_picked
+        ladder = _Ladder(canonical, allow_root, remaps, extra_allow, tree)
+        scratch = _Scratch(canonical, allow_root, source, tree)
+        first_error = ""
+        try:
+            outcome = ladder.attempt(canonical, version)
+            if isinstance(outcome, Slither):
+                oz_tag = tag if has_oz else None
+                note: str | None = None
+                if has_oz and tag is not None and (tree_index > 0 or tag != "v4"):
+                    note = f"oz={tag}"
+                return CompileResult(outcome, version, note, canonical, canonical, oz_tag)
+            first_error = outcome
+            if not first_error_overall:
+                first_error_overall = first_error
+            fixes: set[str] = set()
+            if source.startswith("\ufeff"):
+                fixes.add(_FIX_BOM)
+            rescued = _climb_ladder(
+                ladder,
+                canonical,
+                pragmas,
+                version,
+                first_error,
+                fixes,
+                scratch,
+                oz=tree,
+                oz_tag=tag if has_oz else None,
+            )
+            if rescued is not None:
+                return rescued
+        finally:
+            scratch.close()
+        combined_log.extend(ladder.log)
+        if tree_index + 1 < len(worklist):
+            label = tag if tag is not None else "none"
+            combined_log.append(f"oz {label} failed: {_first_error_line(first_error)}")
+
     raise CompileError(
-        f"solc {version}: {first_error[:500]}\nretry ladder: " + " | ".join(ladder.log)
+        f"solc {first_version}: {first_error_overall[:500]}\nretry ladder: "
+        + " | ".join(combined_log)
     )
 
 

@@ -15,14 +15,17 @@ WORKDIR /app
 COPY detector/requirements.txt /app/detector/requirements.txt
 RUN pip install --no-cache-dir -r /app/detector/requirements.txt "jsonschema>=4.20"
 
-# Must match INSTALLED_SOLC in detector/compile.py (contiguous 0.8.24..0.8.37 for recent pragmas).
-RUN for v in 0.4.26 0.5.17 0.6.12 0.7.6 0.8.20 \
-             0.8.24 0.8.25 0.8.26 0.8.27 0.8.28 0.8.29 0.8.30 \
-             0.8.31 0.8.32 0.8.33 0.8.34 0.8.35 0.8.36 0.8.37; do solc-select install $v; done
+# INSTALLED_SOLC SSOT: detector/solc_versions.txt (copied first so compile.py edits do not bust this layer).
+ENV HOME=/opt/detector-home DETECTOR_SOLC_ARTIFACTS=/opt/detector-home/.solc-select/artifacts
+RUN mkdir -p /opt/detector-home
+COPY detector/solc_versions.txt /app/detector/solc_versions.txt
+RUN for v in $(cat /app/detector/solc_versions.txt); do solc-select install "$v"; done
 
 COPY detector /app/detector
 COPY vendor/openzeppelin-contracts /app/vendor/openzeppelin-contracts
+COPY vendor/openzeppelin-contracts-v5 /app/vendor/openzeppelin-contracts-v5
+RUN chmod -R a+rX /opt/detector-home /app
 
-ENV DETECTOR_OZ_DIR=/app/vendor/openzeppelin-contracts PYTHONPATH=/app PYTHONUNBUFFERED=1
+ENV DETECTOR_OZ_DIR=/app/vendor/openzeppelin-contracts DETECTOR_OZ_V5_DIR=/app/vendor/openzeppelin-contracts-v5 PYTHONPATH=/app PYTHONUNBUFFERED=1
 
 ENTRYPOINT ["python", "-m", "detector.docker_entry"]
