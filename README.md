@@ -6,7 +6,10 @@ Offline static analysis on Slither IR: privilege → state → transfer-path/exi
 
 ### Get the runtime
 
-1. `docker load < trust404-detector-amd64.tar.gz` (GitHub release asset) or `docker pull ghcr.io/sdh2222/trust404-detector@sha256:<DIGEST-TBD>`
+1. Published `linux/amd64` image, release `submission-rc1` (built by [`detector-image.yml`](.github/workflows/detector-image.yml) on a native amd64 runner; hardened three-uid smoke green on this exact digest):
+   - `docker pull ghcr.io/sdh2222/trust404-detector@sha256:947d696010cf61246793562dd708de1582cf732126b7714a74ef75b3540ca9dc` (also tagged `:submission-rc1`, `:latest`), then `docker tag ghcr.io/sdh2222/trust404-detector@sha256:947d696010cf61246793562dd708de1582cf732126b7714a74ef75b3540ca9dc trust404/detector:latest`
+   - or `docker load < trust404-detector-amd64.tar.gz` from the [release](https://github.com/sdh2222/trust404/releases/tag/submission-rc1) (sha256 `fc897f1fa13a73bf18726c840a6876fa253c1177f9dc1bc8a8fc9bdc19957393`)
+   - the manifest is `linux/amd64` only; on an arm64 host (Apple Silicon) add `--platform linux/amd64` to `docker pull` / `docker run` and it executes under qemu
 2. `docker build --platform linux/amd64 -f detector/Dockerfile -t trust404/detector:latest .`
 3. `scripts/setup_local.sh`
 
