@@ -14,6 +14,7 @@ from detector.analysis._ir import (
     MSG_SENDER,
     MSG_VALUE,
     assert_never,
+    closure_with_zero_params,
     depends,
     false_son,
     fn_ir,
@@ -296,12 +297,14 @@ def leak_arbitrary_transferfrom(ctx: ContractContext) -> list[Finding]:
                     continue
         if not allowance_ok:
             continue
-        for site in _closure(function):
+        for site, zero_params in closure_with_zero_params(function):
             param_roles = _roles_for(ctx, site)
             for write in balance_writes(site, ctx.bindings, param_roles):
                 if write.kind != "debit":
                     continue
                 if _sender_key(write, site):
+                    continue
+                if write.key is not None and id(write.key) in zero_params:
                     continue
                 discs = tuple(_shape_discs(ctx, function))
                 add(

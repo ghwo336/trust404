@@ -15,6 +15,37 @@ from detector.rules.family_c_leak import (
 from tests.detector.analysis_util import make_ctx, tier1_ctx, tier3_ctx
 from tests.detector.conftest import TIER1, TIER3
 
+# transfer() that calls _update(msg.sender, …) makes Slither mark _update.from as
+# sender-dependent, so _sender_key skips every debit and the seize control is dead.
+# Mint/seize-only keeps the unified _update shape that OZ v5 actually leaks on.
+_UNIFIED_UPDATE_SRC = """\
+pragma solidity ^0.8.20;
+error Bad();
+contract U {
+    mapping(address => uint256) public balanceOf;
+    uint256 public totalSupply;
+    address o;
+    function _update(address from, address to, uint256 v) internal {
+        if (from == address(0)) { totalSupply += v; }
+        else {
+            uint256 fb = balanceOf[from];
+            if (fb < v) revert Bad();
+            balanceOf[from] = fb - v;
+        }
+        if (to == address(0)) { totalSupply -= v; }
+        else { balanceOf[to] += v; }
+    }
+    function mint(address to, uint256 v) external {
+        require(msg.sender == o);
+        _update(address(0), to, v);
+    }
+    function seize(address from, uint256 v) external {
+        require(msg.sender == o);
+        _update(from, address(0), v);
+    }
+}
+"""
+
 _DOWNGRADE = frozenset(
     {"foreign_only", "no_custody", "issuer_token", "managed_role"}
 )
@@ -120,6 +151,22 @@ def test_leak_arbitrary_transferfrom_silent_on_oz_erc20(slither_for) -> None:
         slither_for, "oz_erc20_pausable_ownable", "OzErc20PausableOwnable.sol", "OzErc20PausableOwnable"
     )
     assert leak_arbitrary_transferfrom(ctx) == []
+
+
+def test_leak_arbitrary_transferfrom_skips_zero_address_mint(slither_for, tmp_path) -> None:
+    src = tmp_path / "U.sol"
+    src.write_text(_UNIFIED_UPDATE_SRC, encoding="utf-8")
+    ctx = make_ctx(slither_for, src, "U")
+    hits = [f for f in leak_arbitrary_transferfrom(ctx) if f.function == "mint"]
+    assert hits == [], [(f.function, f.severity, f.reasoning) for f in hits]
+
+
+def test_leak_arbitrary_transferfrom_fires_on_privileged_seize(slither_for, tmp_path) -> None:
+    src = tmp_path / "U.sol"
+    src.write_text(_UNIFIED_UPDATE_SRC, encoding="utf-8")
+    ctx = make_ctx(slither_for, src, "U")
+    hits = [f for f in leak_arbitrary_transferfrom(ctx) if f.function == "seize"]
+    assert hits, "seize must keep firing LEAK_ARBITRARY_TRANSFERFROM"
 
 
 def test_leak_exempt_path_mal_fires_high(slither_for) -> None:

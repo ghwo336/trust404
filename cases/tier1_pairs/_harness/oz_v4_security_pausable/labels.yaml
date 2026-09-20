@@ -1,0 +1,7 @@
+id: tier1/_harness/oz_v4_security_pausable
+file: OzV4SecurityPausable.sol
+preferred_verdict: Benign
+accepted_verdicts: [Benign]
+expected_families: []
+source: "harness: OpenZeppelin v4 symmetric pause (security/Pausable.sol exists only in v4)"
+solc: "0.8.20"

@@ -5,8 +5,10 @@ from __future__ import annotations
 from detector.analysis import balances, privilege, roles
 from detector.analysis._ir import (
     MSG_SENDER,
+    SIG_TOTAL_SUPPLY,
     TX_ORIGIN,
     branch_reverts_before_write,
+    callee_of,
     depends,
     false_son,
     fn_ir,
@@ -20,6 +22,7 @@ from detector.analysis._ir import (
     iter_internal_callees,
     node_sort_key,
     root_state,
+    solidity_sig,
     true_son,
     values_feeding_condition,
 )
@@ -194,10 +197,23 @@ def _reads_supply(node, ctx: ContractContext) -> bool:
     if any(sv in supply for sv in node.state_variables_read):
         return True
     total = ctx.bindings.total_supply
-    if total is None:
-        return False
-    for ir in node.irs:
-        if isinstance(ir, (InternalCall, LibraryCall)) and ir.function is total:
+
+    def is_supply_call(ir) -> bool:
+        if not isinstance(ir, (InternalCall, LibraryCall)):
+            return False
+        callee = callee_of(ir)
+        if callee is None:
+            return False
+        if total is not None and callee is total:
+            return True
+        return solidity_sig(callee) == SIG_TOTAL_SUPPLY
+
+    if any(is_supply_call(ir) for ir in node.irs):
+        return True
+    for root in balances.condition_roots(node):
+        if root in supply:
+            return True
+        if is_supply_call(root):
             return True
     return False
 

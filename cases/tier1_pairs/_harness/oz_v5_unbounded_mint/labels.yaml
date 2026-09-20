@@ -1,0 +1,9 @@
+id: tier1/_harness/oz_v5_unbounded_mint
+file: OzV5UnboundedMint.sol
+preferred_verdict: Malicious
+accepted_verdicts: [Malicious]
+expected_families: [B]
+expected_rule_ids: [BAL_PRIV_MINT]
+expected_functions: [mint]
+source: "harness: OpenZeppelin v5 Ownable(msg.sender) + uncapped onlyOwner mint (P2 shape on v5)"
+solc: "0.8.20"

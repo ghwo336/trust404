@@ -8,8 +8,10 @@ from typing import Any, Literal
 from slither.core.cfg.node import Node
 from slither.core.declarations.function import Function
 from slither.core.solidity_types.mapping_type import MappingType
+from slither.core.variables.local_variable import LocalVariable
 from slither.core.variables.state_variable import StateVariable
 from slither.core.variables.variable import Variable
+from slither.slithir.variables.temporary import TemporaryVariable
 from slither.slithir.operations import (
     Assignment,
     Binary,
@@ -631,6 +633,57 @@ def balance_writes(
     return out
 
 
+def condition_roots(node: Node) -> list[Any]:
+    """Resolve condition operands to same-function roots (state / const / call / param)."""
+    function = node.function
+    helper = fn_ir(function)
+    params = set(function.parameters or [])
+    out: list[Any] = []
+    seen_out: set[int] = set()
+
+    def add(item: Any) -> None:
+        if item is None or id(item) in seen_out:
+            return
+        seen_out.add(id(item))
+        out.append(item)
+
+    def walk(var: Any, depth: int, seen: set[int]) -> None:
+        if var is None or depth <= 0 or id(var) in seen:
+            return
+        seen = seen | {id(var)}
+        if isinstance(var, (StateVariable, Constant)) or var in params:
+            add(var)
+            return
+        if not isinstance(var, (LocalVariable, TemporaryVariable)):
+            add(var)
+            return
+        ir = helper.def_of(var)
+        if ir is None:
+            add(var)
+            return
+        if isinstance(ir, Assignment):
+            walk(ir.rvalue, depth - 1, seen)
+            return
+        if isinstance(ir, Binary):
+            walk(ir.variable_left, depth - 1, seen)
+            walk(ir.variable_right, depth - 1, seen)
+            return
+        if isinstance(ir, TypeConversion):
+            walk(ir.variable, depth - 1, seen)
+            return
+        if isinstance(ir, Unary):
+            walk(ir.rvalue, depth - 1, seen)
+            return
+        if isinstance(ir, (InternalCall, LibraryCall)):
+            add(ir)
+            return
+        add(var)
+
+    for val in values_feeding_condition(node):
+        walk(val, 12, set())
+    return out
+
+
 def is_constant_bound(condition_node: Node, ctx: Any) -> bool:
     bindings: Bindings = ctx.bindings
     pw = set(ctx.privileged_writable.keys())
@@ -658,6 +711,15 @@ def is_constant_bound(condition_node: Node, ctx: Any) -> bool:
         if isinstance(ir, SolidityCall):
             continue
         _ = helper
+    roots = condition_roots(condition_node)
+    for root in roots:
+        if isinstance(root, StateVariable):
+            involved_state.append(root)
+        if isinstance(root, (InternalCall, LibraryCall)):
+            callee = callee_of(root)
+            if callee is not None:
+                for sv in callee.state_variables_read:
+                    involved_state.append(sv)
     for sv in involved_state:
         if sv in pw and sv not in allowed_pw:
             return False
@@ -675,6 +737,18 @@ def is_constant_bound(condition_node: Node, ctx: Any) -> bool:
                     has_bound = True
         if isinstance(ir, (InternalCall, LibraryCall)):
             callee = callee_of(ir)
+            if callee is not None and (
+                (bindings.total_supply is not None and callee is bindings.total_supply)
+                or solidity_sig(callee) == SIG_TOTAL_SUPPLY
+            ):
+                has_bound = True
+    for root in roots:
+        if isinstance(root, Constant):
+            has_bound = True
+        if isinstance(root, StateVariable) and (root.is_constant or root.is_immutable or root in supply):
+            has_bound = True
+        if isinstance(root, (InternalCall, LibraryCall)):
+            callee = callee_of(root)
             if callee is not None and (
                 (bindings.total_supply is not None and callee is bindings.total_supply)
                 or solidity_sig(callee) == SIG_TOTAL_SUPPLY

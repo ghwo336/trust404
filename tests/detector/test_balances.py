@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from slither.slithir.operations import InternalCall, LibraryCall
 
+from detector.analysis._ir import is_if_node
 from detector.analysis.balances import arith_kind, balance_writes, is_constant_bound
-from tests.detector.analysis_util import fn, svar, tier1_ctx, tier3_ctx
+from tests.detector.analysis_util import fn, make_ctx, svar, tier1_ctx, tier3_ctx
 
 
 def test_bind_priv_mint(slither_for) -> None:
@@ -121,3 +122,67 @@ def test_constant_bound(slither_for) -> None:
     inner = fn(mal, "_transfer")
     gate = next(n for n in inner.nodes if n.contains_require_or_assert() and "maxTx" in str(n.expression))
     assert is_constant_bound(gate, mal) is False
+
+
+_LOCAL_CAP_SRC = """\
+pragma solidity ^0.8.20;
+error Over();
+contract G {
+    uint256 private immutable _cap;
+    uint256 private _supply;
+    mapping(address => uint256) b;
+    address o;
+    constructor(uint256 c) { _cap = c; o = msg.sender; }
+    function cap() public view returns (uint256) { return _cap; }
+    function totalSupply() public view returns (uint256) { return _supply; }
+    function mint(address t, uint256 a) external {
+        require(msg.sender == o);
+        _supply += a;
+        b[t] += a;
+        uint256 m = cap();
+        uint256 s = totalSupply();
+        if (s > m) revert Over();
+    }
+}
+"""
+
+_WRITABLE_CAP_SRC = """\
+pragma solidity ^0.8.20;
+error Over();
+contract H {
+    uint256 public capVar;
+    uint256 private _supply;
+    mapping(address => uint256) b;
+    address o;
+    constructor() { o = msg.sender; }
+    function setCap(uint256 c) external { require(msg.sender == o); capVar = c; }
+    function totalSupply() public view returns (uint256) { return _supply; }
+    function mint(address t, uint256 a) external {
+        require(msg.sender == o);
+        _supply += a;
+        b[t] += a;
+        uint256 m = capVar;
+        uint256 s = totalSupply();
+        if (s > m) revert Over();
+    }
+}
+"""
+
+
+def _mint_if_node(ctx):
+    mint = fn(ctx, "mint")
+    return next(node for node in mint.nodes if is_if_node(node))
+
+
+def test_constant_bound_through_same_function_locals(slither_for, tmp_path) -> None:
+    src = tmp_path / "G.sol"
+    src.write_text(_LOCAL_CAP_SRC, encoding="utf-8")
+    ctx = make_ctx(slither_for, src, "G")
+    assert is_constant_bound(_mint_if_node(ctx), ctx) is True
+
+
+def test_constant_bound_rejects_privileged_writable_through_local(slither_for, tmp_path) -> None:
+    src = tmp_path / "H.sol"
+    src.write_text(_WRITABLE_CAP_SRC, encoding="utf-8")
+    ctx = make_ctx(slither_for, src, "H")
+    assert is_constant_bound(_mint_if_node(ctx), ctx) is False

@@ -21,7 +21,7 @@ from tests.detector.conftest import HARNESS, REPO_ROOT
 VENDOR_OZ = REPO_ROOT / "vendor" / "openzeppelin-contracts"
 
 RELAXABLE_SOURCE = (
-    "pragma solidity 0.8.19;\n"
+    "pragma solidity 0.8.38;\n"
     "contract A { address public owner; "
     "function set(address o) public { require(msg.sender == owner); owner = o; } }\n"
 )
@@ -122,14 +122,14 @@ def test_analyze_dir_uses_ladder_temp_path_for_targets(tmp_path, caplog) -> None
 
 
 def test_relaxed_file_matches_plain_compile(tmp_path) -> None:
-    """The ladder must not change analysis semantics: 0.8.19-pinned and 0.8.20-pinned twins agree."""
+    """The ladder must not change analysis semantics: uninstalled-pin and 0.8.20-pinned twins agree."""
     relaxed_dir = tmp_path / "relaxed"
     plain_dir = tmp_path / "plain"
     relaxed_dir.mkdir()
     plain_dir.mkdir()
     (relaxed_dir / "A.sol").write_text(RELAXABLE_SOURCE, encoding="utf-8")
     (plain_dir / "A.sol").write_text(
-        RELAXABLE_SOURCE.replace("pragma solidity 0.8.19;", "pragma solidity 0.8.20;"), encoding="utf-8"
+        RELAXABLE_SOURCE.replace("pragma solidity 0.8.38;", "pragma solidity 0.8.20;"), encoding="utf-8"
     )
     relaxed, _ = analyze_dir(relaxed_dir)
     plain, _ = analyze_dir(plain_dir)
@@ -218,18 +218,7 @@ def test_scratch_root_removed_after_analyze_dir(tmp_path) -> None:
     assert all(row.reason != "analysis_error" for row in results)
 
 
-HARNESS_FILES = [
-    "compile_fail/broken.sol",
-    "multi_file/Helper.sol",
-    "multi_file/Token.sol",
-    "oz_accesscontrol_blacklist/OzRoleBlacklist.sol",
-    "oz_import/TokenOZ.sol",
-    "oz_ownable2step_token/OzTwoStepToken.sol",
-    "oz_ownable_fee_capped/OzFeeCapped.sol",
-    "oz_ownable_rug/OzOwnableRug.sol",
-    "timelock_self_call/MiniTimelock.sol",
-    "trading_switch_owner_bypass/TradingSwitchBypass.sol",
-]
+HARNESS_FILES = sorted(p.relative_to(HARNESS).as_posix() for p in HARNESS.rglob("*.sol"))
 
 # OZ-shaped regression fixtures: verdicts are pinned by their labels.yaml and scored by BAYBENCH,
 # not asserted here (known-open detector work). The engine must still compile and analyse them.
@@ -260,6 +249,21 @@ def test_analyze_dir_harness() -> None:
     for rel in OZ_REGRESSION_FILES:
         assert by_file[rel].verdict in {"Malicious", "Uncertain", "Benign"}
         assert by_file[rel].reason != "compile_failed"
+
+
+def test_analyze_dir_oz_v_harness() -> None:
+    results, skipped = analyze_dir(HARNESS)
+    assert skipped == 0
+    by_file = {r.file: r for r in results}
+    expected = {
+        "oz_v5_unbounded_mint/OzV5UnboundedMint.sol": "Malicious",
+        "oz_v5_capped_mint/OzV5CappedMint.sol": "Benign",
+        "oz_v5_pausable/OzV5Pausable.sol": "Benign",
+        "oz_v4_security_pausable/OzV4SecurityPausable.sol": "Benign",
+    }
+    for rel, verdict in expected.items():
+        assert by_file[rel].verdict == verdict
+        assert by_file[rel].verdict != "Uncertain"
 
 
 def test_timeout_and_analysis_error(monkeypatch, tmp_path) -> None:
@@ -391,8 +395,9 @@ def test_hardhat_layout_node_modules_automap(tmp_path, monkeypatch) -> None:
         tmp_path / "contracts" / "Token.sol",
         'import "@openzeppelin/contracts/token/ERC20/ERC20.sol";',
     )
-    monkeypatch.setattr(compile_mod, "_oz_dir", lambda: None)
+    monkeypatch.setattr(compile_mod, "oz_trees", lambda: [])
     monkeypatch.setenv("DETECTOR_OZ_DIR", "")
+    monkeypatch.setenv("DETECTOR_OZ_V5_DIR", "")
     results, skipped = analyze_dir(tmp_path)
     assert [r.file for r in results] == ["contracts/Token.sol"]
     assert results[0].reason != "compile_failed"

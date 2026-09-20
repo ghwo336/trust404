@@ -5,8 +5,10 @@ from __future__ import annotations
 import pytest
 
 from detector.engine import _analyze_in_process
+from detector.policy import finalize
 from detector.rules.base import CATALOG
-from tests.detector.analysis_util import load_tier1_label, run_and_finalize, tier1_ctx
+from detector.rules.family_b_balance import BAL_PRIV_MINT
+from tests.detector.analysis_util import load_tier1_label, make_ctx, run_and_finalize, tier1_ctx
 from tests.detector.conftest import tier1_sol
 
 FAMILY_B = (
@@ -109,3 +111,68 @@ def test_family_b_file_verdict(rule_id: str) -> None:
             f"{[(f.get('rule_id'), f.get('function')) for f in other_high]}"
         )
     assert ben["verdict"] in ben_label["accepted_verdicts"], ben
+
+
+_LOCAL_CAP_SRC = """\
+pragma solidity ^0.8.20;
+error Over();
+contract G {
+    uint256 private immutable _cap;
+    uint256 private _supply;
+    mapping(address => uint256) b;
+    address o;
+    constructor(uint256 c) { _cap = c; o = msg.sender; }
+    function cap() public view returns (uint256) { return _cap; }
+    function totalSupply() public view returns (uint256) { return _supply; }
+    function mint(address t, uint256 a) external {
+        require(msg.sender == o);
+        _supply += a;
+        b[t] += a;
+        uint256 m = cap();
+        uint256 s = totalSupply();
+        if (s > m) revert Over();
+    }
+}
+"""
+
+_WRITABLE_CAP_SRC = """\
+pragma solidity ^0.8.20;
+error Over();
+contract H {
+    uint256 public capVar;
+    uint256 private _supply;
+    mapping(address => uint256) b;
+    address o;
+    constructor() { o = msg.sender; }
+    function setCap(uint256 c) external { require(msg.sender == o); capVar = c; }
+    function totalSupply() public view returns (uint256) { return _supply; }
+    function mint(address t, uint256 a) external {
+        require(msg.sender == o);
+        _supply += a;
+        b[t] += a;
+        uint256 m = capVar;
+        uint256 s = totalSupply();
+        if (s > m) revert Over();
+    }
+}
+"""
+
+
+def test_bal_priv_mint_local_cap_is_info_after_finalize(slither_for, tmp_path) -> None:
+    src = tmp_path / "G.sol"
+    src.write_text(_LOCAL_CAP_SRC, encoding="utf-8")
+    ctx = make_ctx(slither_for, src, "G")
+    hits = [f for f in finalize(BAL_PRIV_MINT(ctx)) if f.rule_id == "BAL_PRIV_MINT"]
+    assert hits, "BAL_PRIV_MINT produced no findings"
+    assert all("constant_cap" in f.discriminators for f in hits), [f.discriminators for f in hits]
+    assert all(f.severity == "INFO" for f in hits), [(f.function, f.severity) for f in hits]
+
+
+def test_bal_priv_mint_writable_cap_stays_high(slither_for, tmp_path) -> None:
+    src = tmp_path / "H.sol"
+    src.write_text(_WRITABLE_CAP_SRC, encoding="utf-8")
+    ctx = make_ctx(slither_for, src, "H")
+    hits = [f for f in finalize(BAL_PRIV_MINT(ctx)) if f.rule_id == "BAL_PRIV_MINT"]
+    assert hits, "BAL_PRIV_MINT produced no findings"
+    assert all("constant_cap" not in f.discriminators for f in hits), [f.discriminators for f in hits]
+    assert any(f.severity == "HIGH" for f in hits), [(f.function, f.severity) for f in hits]

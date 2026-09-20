@@ -10,6 +10,7 @@ from slither.core.cfg.node import Node, NodeType
 from slither.core.declarations.function import Function
 from slither.core.declarations.modifier import Modifier
 from slither.core.declarations.solidity_variables import (
+    SolidityCustomRevert,
     SolidityFunction,
     SolidityVariable,
     SolidityVariableComposed,
@@ -62,7 +63,7 @@ REQUIRE_ASSERT_NAMES = frozenset(
         "assert(bool)",
     }
 )
-REVERT_NAMES = frozenset({"revert()", "revert(string)", "revert "})
+REVERT_NAMES = frozenset({"revert()", "revert(string)"})
 SELFDESTRUCT_NAMES = frozenset({"selfdestruct(address)", "suicide(address)"})
 BALANCE_CALL_NAMES = frozenset({"balance(address)", "this.balance()"})
 
@@ -298,9 +299,14 @@ def require_kind(node: Node) -> str | None:
 
 
 def is_revert_ir(ir: Any) -> bool:
-    if isinstance(ir, SolidityCall) and solidity_call_name(ir) in REVERT_NAMES:
+    if not isinstance(ir, SolidityCall):
+        return False
+    name = solidity_call_name(ir)
+    if name in REVERT_NAMES:
         return True
-    return False
+    if isinstance(ir.function, SolidityCustomRevert):
+        return True
+    return name.startswith("revert ")
 
 
 def is_revert_node(node: Node) -> bool:
@@ -943,3 +949,57 @@ def call_full_name(ir: HighLevelCall) -> str:
     if isinstance(fn, Variable):
         return getattr(fn, "full_name", None) or name
     return getattr(fn, "full_name", None) or name
+
+
+def closure_with_zero_params(function: Function) -> list[tuple[Function, frozenset[int]]]:
+    """Internal-call closure with parameters bound to address(0) on every path from `function`."""
+
+    def argument_is_zero(arg: Any, caller: Function, zero_param_ids: frozenset[int]) -> bool:
+        if arg is None:
+            return False
+        if id(arg) in zero_param_ids:
+            return True
+        if isinstance(arg, Constant):
+            val = arg.value
+            return val == 0 or val is False
+        helper = fn_ir(caller)
+        unwrapped = helper.unwrap(arg)
+        for param in caller.parameters or []:
+            if (arg is param or unwrapped is param) and id(param) in zero_param_ids:
+                return True
+        ir = helper.def_of(arg)
+        if isinstance(ir, TypeConversion):
+            inner = ir.variable
+            if isinstance(inner, Constant):
+                val = inner.value
+                return val == 0 or val is False
+        return False
+
+    zeros: dict[int, frozenset[int]] = {id(function): frozenset()}
+    seen_fns: dict[int, Function] = {id(function): function}
+    work = [function]
+    while work:
+        current = work.pop()
+        current_zeros = zeros[id(current)]
+        for ir, callee in iter_internal_callees(current):
+            args = list(ir.arguments or [])
+            params = list(callee.parameters or [])
+            edge_ids: list[int] = []
+            if len(args) == len(params):
+                for arg, param in zip(args, params):
+                    if argument_is_zero(arg, current, current_zeros):
+                        edge_ids.append(id(param))
+            edge_zeros = frozenset(edge_ids)
+            cid = id(callee)
+            if cid not in zeros:
+                zeros[cid] = edge_zeros
+                seen_fns[cid] = callee
+                work.append(callee)
+                continue
+            merged = zeros[cid] & edge_zeros
+            if merged != zeros[cid]:
+                zeros[cid] = merged
+                work.append(callee)
+    items = [(fn, zeros[id(fn)]) for fn in seen_fns.values()]
+    items.sort(key=lambda item: function_sort_key(item[0]))
+    return items

@@ -2,9 +2,27 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from detector.analysis import privilege
+from detector.analysis.context import ContractContext
+from detector.compile import compile_file_ex
+from detector.engine import target_contracts
 from tests.detector.analysis_util import fn, make_ctx, svar, tier1_ctx, tier3_ctx
 from tests.detector.conftest import CASES, HARNESS
+
+
+def _ctx_ex(path: Path, name: str | None = None) -> ContractContext:
+    compiled = compile_file_ex(path, input_root=path.parent)
+    contracts = target_contracts(compiled.slither, compiled.source_path)
+    if name is not None:
+        picked = [c for c in contracts if c.name == name]
+        assert picked, f"{name} not in {[c.name for c in contracts]}"
+        contract = picked[0]
+    else:
+        assert contracts, path
+        contract = contracts[0]
+    return ContractContext(slither=compiled.slither, contract=contract, input_root=path.parent)
 
 
 def test_exit_addr_gate_mal(slither_for) -> None:
@@ -129,3 +147,69 @@ def test_sell_only_pair_compare_is_not_atom(slither_for) -> None:
     kinds = {a.kind for a in privilege.auth_atoms(inner)}
     assert "eq_state_address" not in kinds
     assert privilege.auth_atoms(inner) == []
+
+
+def test_oz_v5_unbounded_mint_is_privileged() -> None:
+    path = HARNESS / "oz_v5_unbounded_mint" / "OzV5UnboundedMint.sol"
+    ctx = _ctx_ex(path, "OzV5UnboundedMint")
+    mint = fn(ctx, "mint")
+    assert privilege.is_privileged(mint)
+    atoms = privilege.auth_atoms(mint)
+    assert any(a.kind == "eq_state_address" and a.sender_source == "msg.sender" for a in atoms)
+
+
+def test_custom_error_revert_is_privileged(tmp_path: Path) -> None:
+    src = tmp_path / "G.sol"
+    src.write_text(
+        "pragma solidity ^0.8.20;\n"
+        "error NotOwner();\n"
+        "contract G {\n"
+        "    address private o;\n"
+        "    constructor(){o=msg.sender;}\n"
+        "    mapping(address=>uint256) public b;\n"
+        "    function mint(address t,uint256 a) external {\n"
+        "        if (msg.sender != o) revert NotOwner();\n"
+        "        b[t]+=a;\n"
+        "    }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    mint = fn(_ctx_ex(src, "G"), "mint")
+    assert privilege.is_privileged(mint) is True
+
+
+def test_require_sender_eq_still_privileged(tmp_path: Path) -> None:
+    src = tmp_path / "R.sol"
+    src.write_text(
+        "pragma solidity ^0.8.20;\n"
+        "contract R {\n"
+        "    address private o;\n"
+        "    constructor(){o=msg.sender;}\n"
+        "    mapping(address=>uint256) public b;\n"
+        "    function mint(address t,uint256 a) external {\n"
+        "        require(msg.sender == o);\n"
+        "        b[t]+=a;\n"
+        "    }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    mint = fn(_ctx_ex(src, "R"), "mint")
+    assert privilege.is_privileged(mint) is True
+
+
+def test_if_without_revert_is_not_privileged(tmp_path: Path) -> None:
+    src = tmp_path / "N.sol"
+    src.write_text(
+        "pragma solidity ^0.8.20;\n"
+        "contract N {\n"
+        "    address private o;\n"
+        "    constructor(){o=msg.sender;}\n"
+        "    mapping(address=>uint256) public b;\n"
+        "    function mint(address t,uint256 a) external {\n"
+        "        if (msg.sender != o) { b[t] = 0; }\n"
+        "    }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    mint = fn(_ctx_ex(src, "N"), "mint")
+    assert privilege.is_privileged(mint) is False
