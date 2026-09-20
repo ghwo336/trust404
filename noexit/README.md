@@ -1,0 +1,251 @@
+# noexit
+
+**Offline static analysis that finds honeypot, rug-pull and hidden-privilege logic in Solidity source — before anyone signs.**
+
+> Blockchains only record what succeeded. A token that lets you buy but never sell leaves no trace on-chain until the victim tries to exit.
+> `noexit` reads the contract's *logic flow and permission structure* and tells you whether there is an exit.
+
+Built for **TRUST404 — Track 1: Smart Contract Threat Detection**.
+
+- Input: one or more `.sol` files or directories (recursive batch mode); `import` statements are resolved offline inside the tree (relative paths, `node_modules`, `lib/`, `remappings.txt`)
+- Output: `Benign` / `Malicious` / `Uncertain` per file, with every finding pinned to a code location, evidence, reasoning and a step-by-step **attack path**; Benign verdicts come with the **checklist of what was verified**
+- 100% offline: no compiler, no RPC, no LLM, no network. Pure AST analysis (`@solidity-parser/parser`), works for any `pragma` from 0.4 to 0.8
+- Machine-readable JSON (and SARIF) for automated grading, colored CLI for humans
+
+---
+
+## TRUST404 grading entry point (Track 1)
+
+```bash
+./run.sh ./cases > out.json          # every *.sol directly inside ./cases -> one JSON array on stdout (schema.json), logs on stderr, exit 0
+# or, with no Node on the grading machine:
+docker build -t noexit .
+docker run --rm --network none -v "$PWD/cases:/input:ro" noexit /input > out.json
+```
+
+`run.sh` calls `node dist/cli.js judge <dir>`. Each object carries `file`, `verdict` (`MALICIOUS` / `BENIGN` / `UNCERTAIN`), `reasons[]` (rule id, title, reasoning and the numbered attack path; for BENIGN the passed checks), `evidence[]` (`{function, line}` — the triggering statement plus the function declaration, and the privileged setter that arms it), and the optional `risk_level` / `risk_type` / `confidence`. Files that fail to parse come back as `UNCERTAIN`; the run never exits non-zero. Validated against the track's `schema.json`; the five public samples (P1–P5) are all classified as labeled.
+
+Verdict policy follows the track's boundary rules: a pause/limit that applies to the owner too is availability only (`BENIGN` + centralisation note); an asymmetric one (owner or a list exempt) is `MALICIOUS`; privileged minting is `MALICIOUS` unless a supply cap is enforced in code; owner recovery of force-sent ETH is not theft.
+
+## Quick start
+
+```bash
+git clone <this repo> && cd noexit
+npm install          # only dependency that matters: @solidity-parser/parser (pure JS, bundled offline)
+npm run build
+
+# scan a directory (recursive) and write the JSON report
+node dist/cli.js scan ./samples --out report.json
+
+# or without building
+npx tsx src/cli.ts scan ./samples
+```
+
+Verify the network is not needed:
+
+```bash
+unshare -n node dist/cli.js scan ./samples   # Linux; or just pull the cable
+```
+
+Run the regression suite (every file under `samples/<verdict>/` must be classified as that verdict):
+
+```bash
+npm test
+```
+
+## CLI
+
+```
+noexit scan <paths...> [options]
+
+  -o, --out <file>        write the full JSON report to this file
+  -f, --format <fmt>      stdout format: pretty (default) | json | sarif | summary
+  -v, --verbose           print evidence + reasoning for every finding (incl. info)
+      --no-color          plain output
+      --fail-on <verdict> exit 1 if any file is `malicious` (or `uncertain`)
+```
+
+`summary` prints one tab-separated line per file (`verdict  score  file  summary`) — convenient for grading scripts.
+
+## Output schema (`--out report.json`)
+
+```jsonc
+{
+  "tool": "noexit", "version": "0.1.0", "generatedAt": "...", "inputs": ["./samples"],
+  "totals": { "files": 19, "malicious": 12, "uncertain": 1, "benign": 6, "errors": 0 },
+  "files": [
+    {
+      "file": "samples/malicious/01_SellBlock.sol",
+      "verdict": "Malicious",            // Benign | Malicious | Uncertain
+      "score": 44,                       // 0..100 risk score
+      "summary": "Malicious: Sell path reverts (buy allowed, sell blocked)",
+      "parseErrors": [],
+      "contracts": [{
+        "name": "MoonRocket", "kind": "contract", "bases": ["ERC20", "Ownable"],
+        "privilegedFunctions": ["renounceOwnership [modifier onlyOwner: require(msg.sender vs _owner)]", "..."],
+        "transferPath": ["transfer", "transferFrom", "_transfer", "_mint", "burn"],
+        "findings": [ /* same objects as below */ ]
+      }],
+      "findings": [{
+        "id": "SELL_RESTRICTION",
+        "title": "Sell path reverts (buy allowed, sell blocked)",
+        "severity": "critical",          // critical | high | medium | low | info
+        "confidence": 0.95,
+        "location": { "file": "...", "line": 57, "column": 8, "endLine": 59, "contract": "MoonRocket", "function": "_transfer",
+                      "snippet": "if (to == uniswapV2Pair && from != owner()) { revert(...); }" },
+        "evidence": "Transfer to the liquidity pair is rejected: to == uniswapV2Pair && from != owner()",
+        "reasoning": "Inside the token transfer logic, a transfer whose destination is the DEX pair (i.e. a sell) hits a revert unless the sender is owner/exempt. ...",
+        "related": [ { "file": "...", "line": 58, "function": "setPair" } ]   // e.g. the privileged setter that arms the trap
+      }]
+    }
+  ]
+}
+```
+
+## Reading a result
+
+```
+MALICIOUS  44/100  samples/malicious/02_OwnerBlacklist.sol
+  CRITICAL BLACKLIST_GATE  Owner-controlled address blacklist blocks transfers  @ SafeInu._transfer() L57
+           require(!_isBot[from] && !_isBot[to], "SINU: bot detected")
+           1. Victim buys normally; the blacklist mapping is empty for them.
+           2. Owner calls manageBots() [manageBots() L54] with the victim's address.
+           3. Victim's next transfer hits _transfer() L57: `require(!_isBot[from] && !_isBot[to])` -> revert.
+           4. Result: targeted freeze. Owner can do this to every holder ... invisible on-chain until the victim tries.
+
+BENIGN      2/100  samples/benign/03_FairTaxToken.sol
+  LOW      TRADING_GATE  One-way launch gate (owner enables trading once)  @ FairTaxToken._transfer() L76
+           checks for FairTaxToken:
+           ✓ sell_path_symmetric      transfer path treats to==uniswapV2Pair (sell) and from==uniswapV2Pair (buy) the same ...
+           ✓ fees_capped              every owner-settable variable feeding the transfer arithmetic is bounded by a require() ...
+           ✓ ownership_honest         owner variable is written only by constructor / transferOwnership / renounceOwnership-shaped functions
+           ...
+```
+
+Every finding in the JSON carries `attackPath` (the numbered steps) and every contract carries `checks[]` (pass/fail + note), so a grader can see *why* a file is Benign, not just that nothing fired.
+
+## How it works
+
+`noexit` does **not** grep for keywords. Each file goes through three stages:
+
+### 1. Contract model
+The AST is turned into a per-contract model, with inheritance flattened across the analyzed files:
+
+- **state variables** classified by *type + usage*, not by name: the mapping returned by `balanceOf()` is the balance map; the address assigned from `createPair()` or compared against `to`/`from` in the transfer path is the pair; the address assigned `msg.sender` in the constructor or compared against `msg.sender` in a modifier is the owner; a `mapping(address=>bool)` seeded with owner/`address(this)` in the constructor is an exemption map. Names (`_isBot`, `sellFee`) only raise confidence. Functions that just `return msg.sender` or return the owner slot are recognised as `_msgSender()` / `owner()` aliases whatever they are called - see the `*_Obf_*` samples, which are real honeypots with every identifier renamed to `_q1`, `_q2`, …
+- **fee data-flow**: a state variable is a "fee" if it reaches a `*`/`/` (or SafeMath `mul`/`div`) in the transfer path directly, through a local, through a state-to-state assignment, or as an argument to an internal function whose parameter is used in arithmetic (2 rounds, interprocedural)
+- **modifiers**, analyzed by body: a modifier is *privileged* if it compares `msg.sender` (or `_msgSender()`) against an owner-like address, a hard-coded address, a role mapping, or calls `_checkOwner()` etc. (name is only a fallback for bases outside the file set)
+- **functions**: visibility, modifiers, inline privilege checks, every state write (`=`, `+=`, `-=`, `delete`, `++`…), reads and internal calls
+- **transfer path**: `transfer/_transfer/_update/_tokenTransfer/…` seeds ∪ every function that writes a balance mapping, closed over the internal call graph. This is where a honeypot has to live.
+
+### 2. Rules — logic and permission flow, not keywords
+Every rule reasons about *who can write what* and *what the transfer path does with it*:
+
+| id | what it proves | severity |
+|---|---|---|
+| `SELL_RESTRICTION` | Inside the transfer path, a branch that is only taken when `to == pair` (a sell) reverts, or credits tokens to someone other than the recipient and returns. Exemptions for owner/excluded addresses raise confidence. | critical |
+| `SELL_FEE_UNCAPPED` | The fee variable assigned in the sell branch has a privileged setter with no (or ≥50%) upper bound. | critical |
+| `BLACKLIST_GATE` | A `mapping(address=>bool)` is *both* written by a privileged function (for arbitrary addresses) *and* used as a block condition in the transfer path. | critical / high |
+| `TRADING_GATE` | A bool read as a transfer requirement that a privileged function can flip back to `false`. Sell-only gate → critical; one-way "enable trading once" → low. | critical / high / low |
+| `UNCAPPED_FEE` | A uint that feeds the transfer arithmetic with a privileged setter lacking an effective cap (constants are resolved, denominator inferred from `/100`, `/10000`…). Sell-named fees escalate. | critical … low |
+| `OWNER_LIMIT_TO_ZERO` | `require(amount <= limit)` in the (sell) path where the privileged setter of `limit` has no lower bound — anti-whale limit that becomes a sell block. | critical / medium |
+| `HIDDEN_MINT` / `OPEN_MINT` / `OWNER_MINT` | Balance + supply increase (or `_mint`) in a function whose name hides it (critical), an unguarded public function (critical), an owner `mint` without cap (medium) or with a cap (low). | critical … low |
+| `BALANCE_MANIPULATION` | Privileged direct writes to the balance mapping outside the transfer path (overwrite / burn-from / silent credit). | critical / high |
+| `APPROVAL_BYPASS` | Allowance mapping written on behalf of other holders; `transferFrom` that never consults allowances; allowance skipped for the owner. | critical |
+| `FAKE_RENOUNCE` / `HIDDEN_OWNER_TRANSFER` / `OPEN_OWNER_TAKEOVER` | `renounceOwnership` that does not zero the owner or stashes it first; owner restored from a backup in `unlock()`; owner written by an unguarded function. | critical / high |
+| `EXTERNAL_TRANSFER_HOOK` | The transfer path calls an external contract stored in a state variable — critical if a privileged function can replace that address (logic swap after launch). | critical / high |
+| `SELFDESTRUCT`, `DELEGATECALL` | With escalation if unguarded or if the delegatecall target is owner-settable. | critical / high |
+| `OPEN_DRAIN` | Unguarded function sending `address(this).balance` (or the contract's whole token balance) to the caller. | critical |
+| `PRIVILEGED_WITHDRAW` | Funds moved to the owner; low if the function is named honestly (`withdraw…`), medium if the name hides it. | medium / low |
+| `ALLOWLIST_GATE` | `require(allowed[sender])` in the transfer path where only a privileged function writes the list: everyone the owner has not approved is locked in. | critical |
+| `EXIT_TIME_GATE` | `block.timestamp`/`number` compared with a privileged-writable bound on the transfer path; critical when the owner is exempt, low when the bound is constant or applies to the owner too. | critical / low |
+| `LEAK_EXEMPT_PATH` | A branch taken only for the owner/exempt sender credits the recipient and returns without debiting the sender. | critical |
+| `VIEW_CALLER_DEPENDENT` | `balanceOf` / `totalSupply` branch on `msg.sender` or the owner: explorers see one number, the transfer logic uses another. | high |
+| `DRAIN_APPROVAL_PULL` | A public function calls `transferFrom(msg.sender, <owner or hard-coded address>, …)` on a foreign token with nothing credited back: the contract half of an approval-phishing drainer. | critical |
+| `CUSTODY_SWEEP` | The contract records user ETH deposits per address, and a privileged function sends `address(this).balance` out. | critical |
+| `APPROVAL_HARVEST` | `transferFrom(<parameter>, <owner / collector / privileged caller>, …)` on a foreign token: anyone who ever approved the contract can be emptied later (NFT "marketplace helper", "eligibility check" drainers). | critical |
+| `HIDDEN_CALLER_BRANCH` | Inside the transfer path, an `if (msg.sender == <hard-coded address or hidden state var>)` branch that credits a balance with no debit (and usually returns early). | critical |
+| `WITHDRAW_REDIRECT` | A public function zeroes/decreases `balances[msg.sender]` but sends the ETH to the owner or a fixed address instead of the caller. | critical |
+| `OBFUSCATED_RECIPIENT` | Value sent to `address(uint160(K ^ …))` / an arithmetic-reconstructed or hard-coded address — a fee wallet hidden from source review. | critical / high |
+| `UNSATISFIABLE_PAYOUT` | Payout to the caller guarded by `msg.value >= address(this).balance`, which already includes `msg.value` — the "multiplicator" honeypot. | critical |
+| `RIGGED_PAYOUT` | Payout to the caller gated on equality with a stored hash/answer that a non-constructor function can rewrite — "guess the password / quiz" honeypots. | critical |
+| `PAYMENT_HIJACK` | A public payable function (`SecurityUpdate()`, `Claim()`…) forwards `msg.value` to the owner and credits the caller nothing. | high |
+| `OPAQUE_DEPENDENCY` | The user's withdrawal path calls a contract-typed state variable that was set from a constructor argument — the "private bank + logger" honeypot. | high |
+| `TRANSFER_INFLATION` | The transfer path debits the sender once, credits the recipient the full amount *and* credits a third slot — supply created on every trade with `totalSupply()` frozen. | critical |
+| `HIDDEN_ROLE` / `SHADOWED_AUTH` | A public `owner` that no privileged function reads while a private address gates them; a base authority variable re-declared in the derived contract so "becoming owner" writes a dead slot (HoneyBadger inheritance disorder). | high / critical |
+| `PREEMPTIVE_DRAIN`, `HIDDEN_CODE_LAYOUT` | Whole balance sent to the owner one statement before the caller's "reward"; a statement pushed off-screen by 100+ spaces of padding (HoneyBadger hidden transfer). | critical / high |
+| `PONZI_SHAPE` | Addresses queued on pay-in and later paid from the contract balance with no yield source — capped at `Uncertain`. | high (→ Uncertain) |
+| `CANNOT_SELL_ALL` | `require(amount < balance)` / `balance - amount >= k` on the (sell) path: the last unit of every wallet is trapped, "sell max" always reverts. | high / medium |
+| `COOLDOWN_GATE` | Per-address timestamp written on the transfer path and required to have expired; critical when the wait is owner-settable without a cap, high when the owner is exempt, low when constant and symmetric. | critical … low |
+| `EOA_ONLY_GATE` | `msg.sender == tx.origin` / `isContract()` / `extcodesize` on the transfer path: routers and pairs are contracts, so DEX exits revert; critical with an exemption list. | critical / high |
+| `PERSONAL_FEE` | A per-address fee mapping feeds the transfer arithmetic and a privileged setter writes it for any address — 100 % tax for one holder while the advertised rate stays. | critical / high |
+| `PHANTOM_TRANSFER` | `transfer()`/`transferFrom()` emit `Transfer` but neither they nor their callees write any balance mapping. | critical |
+| `BUY_BLOCK`, `GAS_ABUSE` | Privileged switch on `from == pair`; `new`/`create` or gas-token `mint`/`free` inside the transfer path. | medium / high |
+| `VAR_LOOP_TRAP`, `EMPTY_STRING_ARG_SHIFT`, `UNINIT_STORAGE_STRUCT` | The HoneyBadger compiler-quirk honeypots (pre-0.5 only): a `var` counter from a small literal is a uint8 and wraps at 255 before reaching a `msg.value`-sized bound; an `""` argument in an external self-call shifts every later argument one slot left (the payout goes to the owner); a struct local with no data location is a storage pointer to slot 0 that overwrites fee/owner/secret variables. | high |
+| `TRANSFER_INFLATION` (conservation) | Following the transfer path's local arithmetic (`amount = amount.sub(fee)`, `_burn`, `_mint`): credits − debits − Δsupply must be zero; a one-sided positive residual is a per-transfer hidden mint (the CRPWarner "hidden mint" shape: fee credited to a wallet without being debited). | critical |
+| `REENTRANCY`, `TX_ORIGIN_VALUE` | Exploitable bugs on the value path (gas-forwarding send before the balance write; `tx.origin` guarding a transfer). Flagged as *vulnerability*: the verdict is capped at `Uncertain` because funds are exposed without proof of intent. | high (→ Uncertain) |
+| `EXIT_CALLBACK_CYCLE`, `FEE_ADDR_MUTABLE`, `UPGRADEABLE_PROXY` | Transfer re-entering itself with a contract-controlled address; privileged-mutable fee recipient; single-key upgrade authority. | high / medium |
+| `AUTO_BLACKLIST`, `TX_ORIGIN_AUTH`, `UNRESOLVED_BASE` | Informational context that lowers verdict confidence. | medium / low / info |
+
+### 3. Verdict
+Findings are weighted by severity × confidence (a low-confidence finding is downgraded one level).
+`Malicious` = at least one confident critical or high finding (every high is an asset-loss or asymmetric-control path). `Uncertain` = an exploitable vulnerability on the value path (reentrancy, `tx.origin` guard), a single-key upgradeable proxy, a Ponzi payout shape, a file that only partially parses, two mediums, or a medium plus unresolved base contracts. Otherwise `Benign`.
+
+## Sample set
+
+`samples/` contains 71 judged contracts (48 malicious, 19 benign, 4 uncertain) plus helper files for the multi-file cases; `samples-public/` holds the track's five public samples covering the honeypot families seen in the wild — sell revert, owner blacklist, switchable selling, uncapped sell tax, hidden mint, fake renounce + `unlock()`, approval backdoor, external "guard" contract, balance rewrite, max-sell-to-zero, a full reflection-token clone with `bots[]` + `setSellTax`, an open-drain wallet, a multi-file project whose token file is spotless but whose imported `lib/ERC20.sol` skips allowances for the deployer, four fully identifier-obfuscated variants, and the classic ETH honeypot families (rigged password/quiz games, the multiplicator, "security update" payment hijack, private-bank logger, NFT approval harvester, withdraw-redirect bank, XOR-obfuscated fee recipient, hidden hard-coded-caller branch) — and benign controls that *look* similar (fair tax token with capped fees and a one-way launch gate, capped owner mint, OpenZeppelin-style token with unresolved imports, vesting, staking, a proper vault, escrow, multisig, WETH9). `samples/uncertain/` holds two textbook *vulnerable* contracts (reentrant store, `tx.origin` wallet) that must come back `Uncertain`, not `Malicious`.
+
+```
+$ npm test
+71 passed, 0 failed
+```
+
+## Compile confirmation (optional, offline)
+
+Analysis never needs a compiler. Separately, before a verdict is issued, noexit asks whether the source *could compile at all*: a cheap AST pass (`src/deployable.ts`: identifiers declared nowhere, duplicate state variables) and, when the optional `solc-js` packages are installed (`optionalDependencies`: 0.4.26 / 0.5.17 / 0.6.12 / 0.7.6 / 0.8.x — pure wasm, no network, picked by the file's pragma), a real compile with the pragma relaxed. Errors intrinsic to the source (undeclared identifier, type error, bad checksum, duplicate declaration) make the verdict `Uncertain` with the compiler message as the reason, findings still attached. Missing imports and unknown base contracts are **not** treated as compile failures — a file submitted without its dependencies is analysed exactly as before. `NOEXIT_NO_SOLC=1` disables the solc pass. This matters on paper corpora (Pied-Piper's *injected* fixtures, partially flattened CRPWarner files) where a third of the "malicious" sources never compiled; a judgement on code that cannot be deployed is a guess, and noexit says so.
+
+## Team harness (BAYBENCH)
+
+`npm run baybench -- <input-dir> <out>/results.json` emits the `results.json` shape of the team's [BAYBENCH](https://github.com/sdh2222/trust404) harness, mapping noexit rule ids onto the §7 catalog (`EXIT_ADDR_GATE`, `BAL_PRIV_MINT`, `HONEYPOT_LEGACY`, …) with families A–G and HIGH/MED/INFO severities. Register it in `baybench/tools.yaml`:
+
+```yaml
+  - name: noexit
+    cmd: "node /path/to/noexit/dist/baybench.js {input} {output}/results.json"
+```
+
+Current standing on that harness (verdict score, `bench run noexit --no-docker`, labels as of 2026-09-20): tier0_judge 5/5, tier1_pairs 0.91 (67 cases; the remaining gaps are policy — the harness labels a one-way pause / floor-less limit / open-ended time gate that binds the owner too as `Malicious`, whereas noexit follows the track's boundary rule 1 and reports them as centralisation notes), tier2_realworld **0.85** — 491/529 labeled-malicious CRPWarner + HoneyBadger + Pied-Piper contracts flagged (93 %), 169 of the 250 "non-compiling fixture" files returned as `Uncertain` by the compile confirmation above, tier3_benign_risky 0.97 (zero high-severity false positives).
+
+## Real-world benchmark
+
+`bench/` downloads verified source for real Ethereum contracts and runs the scanner on them (`npm run bench`; sources are cached under `bench/src/`, after which `--offline` works). Full report: `bench/RESULTS.md`.
+
+- **Malicious set**: the 189 ERC-20 backdoor contracts labeled by the Pied-Piper study (Ma et al., *ACM TOSEM* 2022; categories FreezeAccount / DisableTransfer / GenerateToken / DestroyToken / ArbitraryTransfer). 1 has no verified source.
+- **Benign set**: 29 blue-chip tokens (WETH, UNI, LINK, DAI, AAVE, COMP, SHIB, PEPE, LDO, ENS, 1INCH, …).
+
+| label \ verdict | Malicious | Uncertain | Benign |
+|---|---|---|---|
+| backdoor (n=188) | **169** | 1 | 18 |
+| blue-chip (n=29) | 12 | 1 | **16** |
+
+Recall 89.9 %, precision 93.4 %, F1 0.916 — with zero tuning on this set beyond fixing bugs it exposed. The 12 blue-chip "false positives" are almost all *uncapped privileged minting* (1INCH, SUSHI, YFI, ENS, GRT, DAI, …): under the track's own rule ("only a code-enforced cap makes owner minting benign", cf. public samples P2 vs P4) that is the required verdict, so the tool reports it as `MALICIOUS` with `risk_type: CENTRALIZATION`-style reasoning. Under a looser policy those would be medium notes and precision returns to ~98 %.
+
+What the misses and the two "false positives" actually are, because they say more than the numbers:
+
+- **PEPE** is flagged Malicious: it really does have an owner-writable `blacklists[]` checked in `_beforeTokenTransfer` plus owner-settable `maxHoldingAmount`. The verdict is correct on the code; the token is "benign" only because the team never used the switch. This is exactly the class of risk the tool exists to surface.
+- **LDO** (MiniMe) is flagged because its `controller` can veto every transfer (`onTransfer` hook) and move tokens without allowance. Again true on the code.
+- **Symmetric pauses** (OpenZeppelin `Pausable`, `stopped`, `transfersEnabled` … with no owner exemption) are *low* → *Benign* with a centralisation note, per the track's rule 1: nothing moves to the owner's side. The same flag with an owner/whitelist escape hatch is *critical*.
+- Most remaining misses are dataset quirks: `freezeAccount()` that writes a mapping **no transfer ever reads** (dead backdoor — nothing can be frozen), a Chainlink `Oracle.sol` labeled FreezeAccount, and MKR/SAI (which sit in *both* lists; MKR was removed from the benign list).
+- Owner-only uncapped `mint()` is *critical* per the track's rule 2 (see above); a cap check in the same function makes it *low*.
+
+## Limitations (honest ones)
+
+- Imports that cannot be resolved inside the input tree (e.g. `@openzeppelin/...` with no `node_modules`) are modeled by their well-known names (`_balances`, `onlyOwner`, …) but not analyzed. `UNRESOLVED_BASE` is emitted and `imports.unresolved` lists them so the grader can see it.
+- No data-flow across storage slots or assembly. Inline `assembly { sstore(...) }` tricks are out of scope for v0.1.
+- Heuristics for parameter roles (`from`/`to`/`amount`) use names first, positions second.
+
+## Beyond the CLI
+
+The same engine is exported as a library (`import { scanFile } from "noexit"`), so a dApp or wallet can fetch verified source for the `to` address of a pending transaction and run exactly this analysis before showing the signature prompt — the "pre-flight check" this project started from.
+
+## License
+
+MIT

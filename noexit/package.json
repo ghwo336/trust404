@@ -1,0 +1,46 @@
+{
+  "name": "noexit",
+  "version": "0.1.0",
+  "description": "Offline static analyzer that finds honeypot, rug-pull and hidden-privilege logic in Solidity source before you sign.",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "scan": "tsx src/cli.ts scan",
+    "test": "tsx test/run.ts",
+    "prepare": "npm run build",
+    "bench": "tsc -p bench/tsconfig.json && node bench/out/bench/run.js",
+    "web": "node web/build.mjs",
+    "baybench": "tsc -p tsconfig.json && node dist/baybench.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@solidity-parser/parser": "^0.20.2",
+    "commander": "^15.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.3"
+  },
+  "types": "dist/index.d.ts",
+  "bin": {
+    "noexit": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "optionalDependencies": {
+    "solc": "^0.8.24",
+    "solc-0.4.26": "npm:solc@^0.4.26",
+    "solc-0.5.17": "npm:solc@^0.5.17",
+    "solc-0.6.12": "npm:solc@^0.6.12",
+    "solc-0.7.6": "npm:solc@^0.7.6"
+  }
+}
